@@ -14,7 +14,8 @@ FetchContent_MakeAvailable(googletest)
 add_executable(sqlite_manager_tests
     version_test.cpp
     result_test.cpp
-    connection_test.cpp)
+    connection_test.cpp
+    statement_test.cpp)
 
 target_link_libraries(sqlite_manager_tests
     PRIVATE
