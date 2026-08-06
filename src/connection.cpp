@@ -57,7 +57,7 @@ Status Connection::Open(const std::string& path, OpenMode mode) {
     if (rc != SQLITE_OK) {
         Error error = (db != nullptr)
             ? MakeError(db)
-            : Error::FromSqlite(rc, "unable to allocate database handle");
+            : Error::FromSqlite(rc, sqlite3_errstr(rc));
         sqlite3_close(db);
         return error;
     }
@@ -86,14 +86,12 @@ Status Connection::Execute(const std::string& sql) {
                      "connection is not open");
     }
 
-    char* errmsg = nullptr;
-    const int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &errmsg);
-
+    // Pass no errmsg out-param: on failure the connection holds the
+    // error state, which MakeError() reads (extended code + message),
+    // matching how Open()/Statement report errors.
+    const int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, nullptr);
     if (rc != SQLITE_OK) {
-        std::string message =
-            (errmsg != nullptr) ? errmsg : "unknown error";
-        sqlite3_free(errmsg);
-        return Error::FromSqlite(rc, std::move(message));
+        return MakeError(db_);
     }
 
     return Ok();

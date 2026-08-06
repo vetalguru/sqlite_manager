@@ -3,6 +3,8 @@
 #include <optional>
 #include <ostream>
 
+#include <sqlite3.h>
+
 #include "line_reader.h"
 #include "sql_executor.h"
 #include "sqlite_manager/connection.h"
@@ -11,11 +13,12 @@ namespace sqlite_manager_cli {
 
 namespace {
 
-// True if the accumulated buffer forms a complete SQL input:
-// its last non-whitespace character is a semicolon.
+// True if the accumulated buffer forms one or more complete SQL
+// statements. Delegates to sqlite3_complete(), which correctly ignores
+// semicolons inside string literals, comments, and CREATE TRIGGER
+// bodies - cases a naive last-character check would misjudge.
 bool IsCompleteSql(const std::string& buffer) {
-    const auto last = buffer.find_last_not_of(" \t\r\n");
-    return last != std::string::npos && buffer[last] == ';';
+    return sqlite3_complete(buffer.c_str()) != 0;
 }
 
 // Trims leading and trailing whitespace.

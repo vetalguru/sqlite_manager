@@ -93,11 +93,6 @@ int CliApplication::Run(int argc, char** argv) {
                           out_, err_);
     }
 
-if (positional.size() == 2) {
-        return ExecuteSql(conn, positional[1], repl_config.align,
-                          out_, err_);
-    }
-
     // Real terminal session: use line editing with history. isocline
     // detects non-TTY stdin itself and degrades to plain reads.
     if (&in_ == &std::cin && !batch) {
