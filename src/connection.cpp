@@ -7,6 +7,19 @@
 namespace sqlite_manager {
 
 namespace {
+// Converts a Connection::OpenMode to the corresponding SQLite flags.
+int ToSqliteFlags(Connection::OpenMode mode) {
+    switch (mode) {
+        case Connection::OpenMode::kReadWriteCreate:
+            return SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;
+        case Connection::OpenMode::kReadWrite:
+            return SQLITE_OPEN_READWRITE;
+        case Connection::OpenMode::kReadOnly:
+            return SQLITE_OPEN_READONLY;
+    }
+    return SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE;  // unreachable
+}
+
 // Captures the current error state of a connection into an Error.
 Error MakeError(sqlite3* db) {
     return Error::FromSqlite(sqlite3_extended_errcode(db),
@@ -32,18 +45,15 @@ Connection& Connection::operator=(Connection&& other) noexcept {
     }
     return *this;
 }
-
-Status Connection::Open(const std::string& path) {
+Status Connection::Open(const std::string& path, OpenMode mode) {
     if (db_ != nullptr) {
         return Error(ErrorCode::kMisuse, SQLITE_MISUSE,
                      "connection is already open");
     }
 
     sqlite3* db = nullptr;
-    const int rc = sqlite3_open_v2(
-        path.c_str(), &db,
-        SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr);
-
+    const int rc = sqlite3_open_v2(path.c_str(), &db,
+                                   ToSqliteFlags(mode), nullptr);
     if (rc != SQLITE_OK) {
         Error error = (db != nullptr)
             ? MakeError(db)

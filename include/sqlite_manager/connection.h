@@ -11,6 +11,13 @@ namespace sqlite_manager {
 
 class Connection final {
 public:
+    // How Open() accesses the database file.
+    enum class OpenMode {
+        kReadWriteCreate,   // default: read/write, create if missing
+        kReadWrite,         // read/write, fail if the file does not exist
+        kReadOnly           // read only, fail if the file does not exist
+    };
+
     Connection() = default;
     ~Connection();
 
@@ -20,8 +27,11 @@ public:
     Connection(Connection&& other) noexcept;
     Connection& operator=(Connection&& other) noexcept;
 
-    // Opens a database file, creating it if missing
-    Status Open(const std::string& path);
+    // Opens a database file according to mode.
+    // Use ":memory:" for a temporary in-memory database.
+    // Fails with kMisuse if this connection is already open.
+    Status Open(const std::string& path,
+                OpenMode mode = OpenMode::kReadWriteCreate);
 
     // Closes the connection. Safe to call when already closed (no-op)
     Status Close();

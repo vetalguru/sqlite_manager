@@ -174,5 +174,37 @@ TEST(ConnectionTest, CreatesAndReopensFileDatabase) {
     std::remove(path.c_str());
 }
 
+TEST(ConnectionTest, ReadOnlyModeRejectsWrites) {
+    const std::string path = ::testing::TempDir() + "ro_test.sqlite";
+    std::remove(path.c_str());
+
+    {
+        Connection rw;
+        ASSERT_TRUE(rw.Open(path).ok());
+        ASSERT_TRUE(rw.Execute("CREATE TABLE t (x INTEGER)").ok());
+    }
+
+    Connection ro;
+    ASSERT_TRUE(ro.Open(path, Connection::OpenMode::kReadOnly).ok());
+
+    const Status s = ro.Execute("INSERT INTO t VALUES (1)");
+    ASSERT_FALSE(s.ok());
+    EXPECT_EQ(s.error().code, ErrorCode::kReadOnly);
+
+    std::remove(path.c_str());
+}
+
+TEST(ConnectionTest, ReadOnlyModeFailsOnMissingFile) {
+    const std::string path =
+        ::testing::TempDir() + "no_such_file_98765.sqlite";
+    std::remove(path.c_str());
+
+    Connection conn;
+    const Status s = conn.Open(path, Connection::OpenMode::kReadOnly);
+    ASSERT_FALSE(s.ok());
+    EXPECT_EQ(s.error().code, ErrorCode::kCantOpen);
+    EXPECT_FALSE(conn.IsOpen());
+}
+
 }  // namespace
 }  // namespace sqlite_manager
