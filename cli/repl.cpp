@@ -1,8 +1,9 @@
 #include "repl.h"
 
-#include <istream>
+#include <optional>
 #include <ostream>
 
+#include "line_reader.h"
 #include "sql_executor.h"
 #include "sqlite_manager/connection.h"
 
@@ -28,8 +29,8 @@ std::string Trim(const std::string& text) {
 }  // namespace
 
 Repl::Repl(sqlite_manager::Connection& conn, Config config,
-           std::istream& in, std::ostream& out, std::ostream& err)
-    : conn_(conn), config_(config), in_(in), out_(out), err_(err) {}
+           LineReader& reader, std::ostream& out, std::ostream& err)
+    : conn_(conn), config_(config), reader_(reader), out_(out), err_(err) {}
 
 void Repl::PrintHelp() {
     out_ << "Enter SQL terminated by ';'. Dot commands:\n"
@@ -59,23 +60,24 @@ bool Repl::HandleDotCommand(const std::string& command) {
 
 int Repl::Run() {
     std::string buffer;
-    std::string line;
 
-    if (!config_.batch) out_ << "sql> ";
-    while (std::getline(in_, line)) {
+    while (true) {
+        const std::string prompt = buffer.empty() ? "sql> " : "...> ";
+        std::optional<std::string> line = reader_.ReadLine(prompt);
+        if (!line) break;   // EOF
+
         // Dot commands are recognized only at the start of a statement.
         if (buffer.empty()) {
-            const std::string trimmed = Trim(line);
+            const std::string trimmed = Trim(*line);
             if (!trimmed.empty() && trimmed[0] == '.') {
                 if (HandleDotCommand(trimmed)) {
                     return 0;
                 }
-                if (!config_.batch) out_ << "sql> ";
                 continue;
             }
         }
 
-        buffer += line;
+        buffer += *line;
         buffer += '\n';
 
         if (IsCompleteSql(buffer)) {
@@ -84,8 +86,6 @@ int Repl::Run() {
         } else if (Trim(buffer).empty()) {
             buffer.clear();   // blank input, no continuation prompt
         }
-
-        if (!config_.batch) out_ << (buffer.empty() ? "sql> " : "...> ");
     }
 
     // EOF with a non-empty buffer: execute what we have (mirrors the
@@ -93,7 +93,6 @@ int Repl::Run() {
     if (!Trim(buffer).empty()) {
         ExecuteSql(conn_, buffer, config_.align, out_, err_);
     }
-    if (!config_.batch) out_ << "\n";
     return 0;
 }
 

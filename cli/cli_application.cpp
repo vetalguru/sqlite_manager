@@ -1,10 +1,12 @@
 #include "cli_application.h"
 
+#include <iostream>
 #include <istream>
 #include <ostream>
 #include <string>
 
 #include "arg_parser.h"
+#include "line_reader.h"
 #include "repl.h"
 #include "sql_executor.h"
 #include "sqlite_manager/connection.h"
@@ -35,6 +37,7 @@ int CliApplication::Run(int argc, char** argv) {
     bool help = false;
     bool version = false;
     bool readonly = false;
+    bool batch = false;
     Repl::Config repl_config;
 
     ArgParser parser;
@@ -45,7 +48,7 @@ int CliApplication::Run(int argc, char** argv) {
                "open the database in read-only mode");
     parser.Add({"--align"}, &repl_config.align,
                "align SELECT output columns by width");
-    parser.Add({"--batch"}, &repl_config.batch,
+    parser.Add({"--batch"}, &batch,
                "suppress interactive prompts");
 
     if (!parser.Parse(argc, argv)) {
@@ -90,7 +93,20 @@ int CliApplication::Run(int argc, char** argv) {
                           out_, err_);
     }
 
-    Repl repl(conn, repl_config, in_, out_, err_);
+if (positional.size() == 2) {
+        return ExecuteSql(conn, positional[1], repl_config.align,
+                          out_, err_);
+    }
+
+    // Real terminal session: use line editing with history. isocline
+    // detects non-TTY stdin itself and degrades to plain reads.
+    if (&in_ == &std::cin && !batch) {
+        IsoclineLineReader reader;
+        Repl repl(conn, repl_config, reader, out_, err_);
+        return repl.Run();
+    }
+    StreamLineReader reader(in_, out_, !batch);
+    Repl repl(conn, repl_config, reader, out_, err_);
     return repl.Run();
 }
 
