@@ -11,6 +11,7 @@ class Connection;
 namespace sqlite_manager_cli {
 
 class LineReader;
+class ResultView;
 
 // Interactive SQL shell over an open connection.
 //
@@ -21,9 +22,9 @@ class LineReader;
 // the start of a statement. EOF executes any pending input and exits.
 class Repl final {
 public:
-    // The connection, reader, and streams must outlive the object.
-    Repl(sqlite_manager::Connection& conn,
-         LineReader& reader, std::ostream& out, std::ostream& err);
+    // The connection, reader, view, and streams must outlive the object.
+    Repl(sqlite_manager::Connection& conn, LineReader& reader,
+         const ResultView& view, std::ostream& out, std::ostream& err);
 
     // Runs the loop until EOF or .quit. Returns the exit code
     // (0: session ended normally, regardless of SQL errors inside).
@@ -36,6 +37,7 @@ private:
 
     sqlite_manager::Connection& conn_;
     LineReader& reader_;
+    const ResultView& view_;
     std::ostream& out_;
     std::ostream& err_;
 };

@@ -5,6 +5,7 @@ add_library(sqlite_manager_cli_lib STATIC
     cli_application.cpp
     line_reader.cpp
     repl.cpp
+    result_view.cpp
     sql_executor.cpp)
 
 target_include_directories(sqlite_manager_cli_lib PUBLIC

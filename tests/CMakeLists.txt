@@ -18,6 +18,7 @@ add_executable(sqlite_manager_tests
     statement_test.cpp
     transaction_test.cpp
     arg_parser_test.cpp
+    result_view_test.cpp
     cli_application_test.cpp)
 
 target_link_libraries(sqlite_manager_tests
