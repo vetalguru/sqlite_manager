@@ -31,17 +31,20 @@ private:
     std::vector<char*> pointers_;
 };
 
-// Runs the application with given args, captures exit code and output.
+// Runs the application with given args and stdin content,
+// captures exit code and both output streams.
 struct RunResult {
     int exit_code = -1;
     std::string out;
     std::string err;
 };
 
-RunResult RunApp(std::vector<std::string> args) {
+RunResult RunApp(std::vector<std::string> args,
+                 const std::string& input = "") {
+    std::istringstream in(input);
     std::ostringstream out;
     std::ostringstream err;
-    CliApplication app(out, err);
+    CliApplication app(in, out, err);
 
     ArgvBuilder argv(std::move(args));
     RunResult result;
@@ -73,7 +76,7 @@ TEST(CliApplicationTest, VersionPrintsBothVersions) {
 TEST(CliApplicationTest, MissingArgumentsFails) {
     const RunResult r = RunApp({});
     EXPECT_EQ(r.exit_code, 1);
-    EXPECT_NE(r.err.find("Expected <database> and <sql>"),
+    EXPECT_NE(r.err.find("Expected <database> and optional [sql]"),
               std::string::npos);
     EXPECT_TRUE(r.out.empty());
 }
@@ -85,7 +88,7 @@ TEST(CliApplicationTest, UnknownOptionFailsWithUsage) {
     EXPECT_NE(r.err.find("Usage:"), std::string::npos);
 }
 
-// ---------- SQL execution ----------
+// ---------- SQL execution (single-shot mode) ----------
 
 TEST(CliApplicationTest, SelectPrintsRows) {
     const RunResult r = RunApp({":memory:", "SELECT 1+1, 'hi'"});
@@ -185,6 +188,99 @@ TEST_F(CliApplicationFileTest, ReadonlyMissingFileFails) {
     const RunResult r = RunApp({"--readonly", path_, "SELECT 1"});
     EXPECT_EQ(r.exit_code, 1);
     EXPECT_NE(r.err.find("Cannot open"), std::string::npos);
+}
+
+// ---------- REPL mode (one positional argument) ----------
+
+TEST(CliApplicationReplTest, ExecutesSqlAndQuits) {
+    const RunResult r = RunApp({"--batch", ":memory:"},
+                               "SELECT 1+1;\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "2\n");
+    EXPECT_TRUE(r.err.empty());
+}
+
+TEST(CliApplicationReplTest, EofEndsTheShell) {
+    const RunResult r = RunApp({"--batch", ":memory:"}, "SELECT 1;\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "1\n");
+}
+
+TEST(CliApplicationReplTest, MultilineSqlAccumulatesUntilSemicolon) {
+    const RunResult r = RunApp({"--batch", ":memory:"},
+                               "SELECT\n1+2\n;\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "3\n");
+}
+
+TEST(CliApplicationReplTest, SqlErrorDoesNotTerminateLoop) {
+    const RunResult r = RunApp({"--batch", ":memory:"},
+                               "SELEKT 1;\nSELECT 2;\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.err.find("Error:"), std::string::npos);
+    EXPECT_EQ(r.out, "2\n");   // the loop survived the bad statement
+}
+
+TEST(CliApplicationReplTest, StatePersistsAcrossStatements) {
+    const RunResult r = RunApp(
+        {"--batch", ":memory:"},
+        "CREATE TABLE t (x);\nINSERT INTO t VALUES (7);\n"
+        "SELECT x FROM t;\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "OK\nOK\n7\n");
+}
+
+TEST(CliApplicationReplTest, TablesCommandListsTables) {
+    const RunResult r = RunApp(
+        {"--batch", ":memory:"},
+        "CREATE TABLE bbb (x);\nCREATE TABLE aaa (x);\n.tables\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "OK\nOK\naaa\nbbb\n");
+}
+
+TEST(CliApplicationReplTest, HelpCommandPrintsCommands) {
+    const RunResult r = RunApp({"--batch", ":memory:"}, ".help\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.out.find(".tables"), std::string::npos);
+    EXPECT_NE(r.out.find(".quit"), std::string::npos);
+}
+
+TEST(CliApplicationReplTest, UnknownDotCommandReportsError) {
+    const RunResult r = RunApp({"--batch", ":memory:"}, ".nope\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.err.find("Unknown command: .nope"), std::string::npos);
+}
+
+TEST(CliApplicationReplTest, PromptsAreShownWithoutBatch) {
+    const RunResult r = RunApp({":memory:"}, "SELECT\n1;\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    // sql> then continuation then sql> after execution.
+    EXPECT_NE(r.out.find("sql> "), std::string::npos);
+    EXPECT_NE(r.out.find("...> "), std::string::npos);
+}
+
+TEST(CliApplicationReplTest, BatchSuppressesPrompts) {
+    const RunResult r = RunApp({"--batch", ":memory:"},
+                               "SELECT 1;\n.quit\n");
+    EXPECT_EQ(r.out.find("sql>"), std::string::npos);
+}
+
+TEST(CliApplicationReplTest, PendingInputRunsOnEof) {
+    // No trailing semicolon: the official shell executes pending
+    // input on exit; so do we.
+    const RunResult r = RunApp({"--batch", ":memory:"}, "SELECT 5");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "5\n");
+}
+
+TEST(CliApplicationReplTest, ReadonlyAppliesInRepl) {
+    // :memory: opens fine in readonly (no file needed), but writing
+    // into it must fail - verifies the mode reaches the REPL.
+    const RunResult r = RunApp(
+        {"--batch", "--readonly", ":memory:"},
+        "CREATE TABLE t (x);\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.err.find("Error:"), std::string::npos);
 }
 
 }  // namespace

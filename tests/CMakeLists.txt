@@ -18,16 +18,12 @@ add_executable(sqlite_manager_tests
     statement_test.cpp
     transaction_test.cpp
     arg_parser_test.cpp
-    cli_application_test.cpp
-    ${PROJECT_SOURCE_DIR}/cli/arg_parser.cpp
-    ${PROJECT_SOURCE_DIR}/cli/cli_application.cpp)
-
-target_include_directories(sqlite_manager_tests PRIVATE
-    ${PROJECT_SOURCE_DIR}/cli)
+    cli_application_test.cpp)
 
 target_link_libraries(sqlite_manager_tests
     PRIVATE
         sqlite_manager
+        sqlite_manager_cli_lib
         sqlite_manager_warnings
         GTest::gtest_main)
 

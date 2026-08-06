@@ -1,13 +1,13 @@
 #include "cli_application.h"
 
-#include <algorithm>
+#include <istream>
 #include <ostream>
 #include <string>
-#include <vector>
 
 #include "arg_parser.h"
+#include "repl.h"
+#include "sql_executor.h"
 #include "sqlite_manager/connection.h"
-#include "sqlite_manager/statement.h"
 #include "sqlite_manager/version.h"
 
 namespace sqlite_manager_cli {
@@ -15,86 +15,38 @@ namespace sqlite_manager_cli {
 namespace {
 
 using sqlite_manager::Connection;
-using sqlite_manager::Statement;
-
-struct Options {
-    bool readonly = false;
-    bool align = false;
-    std::string database;
-    std::string sql;
-};
 
 void PrintUsage(std::ostream& out, const ArgParser& parser) {
-    out << "Usage: sqlite-manager [options] <database> <sql>\n"
+    out << "Usage: sqlite-manager [options] <database> [sql]\n"
            "  <database>   path to a database file, or \":memory:\"\n"
-           "  <sql>        SQL to execute (quote it in the shell)\n"
+           "  [sql]        SQL to execute (quote it in the shell);\n"
+           "               omit to enter the interactive shell\n"
            "Options:\n"
         << parser.HelpText();
 }
 
-// Prints all rows of a prepared statement. Returns exit code.
-int RunSelect(Statement& stmt, bool align,
-              std::ostream& out, std::ostream& err) {
-    const int columns = stmt.ColumnCount();
-
-    std::vector<std::vector<std::string>> rows;
-    while (true) {
-        auto step = stmt.Step();
-        if (!step.ok()) {
-            err << "Error: " << step.error().message << "\n";
-            return 1;
-        }
-        if (step.value() == Statement::StepResult::kDone) break;
-
-        std::vector<std::string> row;
-        row.reserve(static_cast<std::size_t>(columns));
-        for (int i = 0; i < columns; ++i) {
-            row.push_back(stmt.ColumnIsNull(i) ? "NULL"
-                                               : stmt.ColumnText(i));
-        }
-        rows.push_back(std::move(row));
-    }
-
-    std::vector<std::size_t> width(static_cast<std::size_t>(columns), 0);
-    if (align) {
-        for (const auto& row : rows) {
-            for (std::size_t i = 0; i < row.size(); ++i) {
-                width[i] = std::max(width[i], row[i].size());
-            }
-        }
-    }
-
-    for (const auto& row : rows) {
-        for (std::size_t i = 0; i < row.size(); ++i) {
-            if (i > 0) out << " | ";
-            out << row[i];
-            if (align) {
-                out << std::string(width[i] - row[i].size(), ' ');
-            }
-        }
-        out << "\n";
-    }
-    return 0;
-}
-
 }  // namespace
 
-CliApplication::CliApplication(std::ostream& out, std::ostream& err)
-    : out_(out), err_(err) {}
+CliApplication::CliApplication(std::istream& in, std::ostream& out,
+                               std::ostream& err)
+    : in_(in), out_(out), err_(err) {}
 
 int CliApplication::Run(int argc, char** argv) {
     bool help = false;
     bool version = false;
-    Options opts;
+    bool readonly = false;
+    Repl::Config repl_config;
 
     ArgParser parser;
     parser.Add({"--help", "-h"}, &help, "print this help and exit");
     parser.Add({"--version"}, &version,
                "print version information and exit");
-    parser.Add({"--readonly"}, &opts.readonly,
+    parser.Add({"--readonly"}, &readonly,
                "open the database in read-only mode");
-    parser.Add({"--align"}, &opts.align,
+    parser.Add({"--align"}, &repl_config.align,
                "align SELECT output columns by width");
+    parser.Add({"--batch"}, &repl_config.batch,
+               "suppress interactive prompts");
 
     if (!parser.Parse(argc, argv)) {
         err_ << parser.error() << "\n";
@@ -115,47 +67,31 @@ int CliApplication::Run(int argc, char** argv) {
         return 0;
     }
 
-    if (parser.positional().size() != 2) {
-        err_ << "Expected <database> and <sql> arguments.\n";
+    const auto& positional = parser.positional();
+    if (positional.empty() || positional.size() > 2) {
+        err_ << "Expected <database> and optional [sql] arguments.\n";
         PrintUsage(err_, parser);
         return 1;
     }
-    opts.database = parser.positional()[0];
-    opts.sql = parser.positional()[1];
 
     Connection conn;
-    const auto mode = opts.readonly
+    const auto mode = readonly
         ? Connection::OpenMode::kReadOnly
         : Connection::OpenMode::kReadWriteCreate;
 
-    if (auto s = conn.Open(opts.database, mode); !s.ok()) {
-        err_ << "Cannot open '" << opts.database
+    if (auto s = conn.Open(positional[0], mode); !s.ok()) {
+        err_ << "Cannot open '" << positional[0]
              << "': " << s.error().message << "\n";
         return 1;
     }
 
-    // Single statements go through Statement so result rows can be
-    // printed; batches fail Prepare and fall back to Execute.
-    auto stmt = Statement::Prepare(conn, opts.sql);
-    if (stmt.ok()) {
-        if (stmt.value().ColumnCount() > 0) {
-            return RunSelect(stmt.value(), opts.align, out_, err_);
-        }
-        auto step = stmt.value().Step();
-        if (!step.ok()) {
-            err_ << "Error: " << step.error().message << "\n";
-            return 1;
-        }
-        out_ << "OK\n";
-        return 0;
+    if (positional.size() == 2) {
+        return ExecuteSql(conn, positional[1], repl_config.align,
+                          out_, err_);
     }
 
-    if (auto s = conn.Execute(opts.sql); !s.ok()) {
-        err_ << "Error: " << s.error().message << "\n";
-        return 1;
-    }
-    out_ << "OK\n";
-    return 0;
+    Repl repl(conn, repl_config, in_, out_, err_);
+    return repl.Run();
 }
 
 }  // namespace sqlite_manager_cli

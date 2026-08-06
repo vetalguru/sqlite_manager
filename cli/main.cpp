@@ -3,6 +3,6 @@
 #include "cli_application.h"
 
 int main(int argc, char** argv) {
-    sqlite_manager_cli::CliApplication app(std::cout, std::cerr);
+    sqlite_manager_cli::CliApplication app(std::cin, std::cout, std::cerr);
     return app.Run(argc, argv);
 }
