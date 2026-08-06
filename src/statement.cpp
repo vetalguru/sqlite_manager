@@ -153,6 +153,13 @@ int Statement::ColumnCount() const {
     return sqlite3_column_count(stmt_);
 }
 
+std::string Statement::ColumnName(int index) const {
+    if (stmt_ == nullptr) return {};
+    const char* name = sqlite3_column_name(stmt_, index);
+    if (name == nullptr) return {};   // out of memory
+    return name;
+}
+
 std::int64_t Statement::ColumnInt64(int index) const {
     if (stmt_ == nullptr) return 0;
     return sqlite3_column_int64(stmt_, index);

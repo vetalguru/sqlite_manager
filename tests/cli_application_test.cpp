@@ -91,16 +91,22 @@ TEST(CliApplicationTest, UnknownOptionFailsWithUsage) {
 // ---------- SQL execution (single-shot mode) ----------
 
 TEST(CliApplicationTest, SelectPrintsRows) {
-    const RunResult r = RunApp({":memory:", "SELECT 1+1, 'hi'"});
+    const RunResult r = RunApp({":memory:", "SELECT 1+1 AS sum, 'hi' AS g"});
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "2 | hi\n");
+    EXPECT_EQ(r.out,
+              "| sum | g  |\n"
+              "|-----|----|\n"
+              "| 2   | hi |\n");
     EXPECT_TRUE(r.err.empty());
 }
 
 TEST(CliApplicationTest, NullPrintsAsNULL) {
-    const RunResult r = RunApp({":memory:", "SELECT NULL"});
+    const RunResult r = RunApp({":memory:", "SELECT NULL AS n"});
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "NULL\n");
+    EXPECT_EQ(r.out,
+              "| n    |\n"
+              "|------|\n"
+              "| NULL |\n");
 }
 
 TEST(CliApplicationTest, DdlPrintsOk) {
@@ -138,18 +144,16 @@ TEST(CliApplicationTest, DashSqlReachesSqliteNotParser) {
 
 // ---------- output formats ----------
 
-TEST(CliApplicationTest, PipeFormatByDefault) {
+TEST(CliApplicationTest, TableFormatWithHeaderAndAlignedColumns) {
     const RunResult r = RunApp(
-        {":memory:", "SELECT 1, 'x' UNION ALL SELECT 22, 'y'"});
+        {":memory:",
+         "SELECT 1 AS a, 'x' AS b UNION ALL SELECT 22, 'y'"});
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "1 | x\n22 | y\n");
-}
-
-TEST(CliApplicationTest, AlignPadsColumns) {
-    const RunResult r = RunApp(
-        {"--align", ":memory:", "SELECT 1, 'x' UNION ALL SELECT 22, 'y'"});
-    EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "1  | x\n22 | y\n");
+    EXPECT_EQ(r.out,
+              "| a  | b |\n"
+              "|----|---|\n"
+              "| 1  | x |\n"
+              "| 22 | y |\n");
 }
 
 // ---------- file database and readonly ----------
@@ -172,7 +176,10 @@ TEST_F(CliApplicationFileTest, DataPersistsBetweenRuns) {
 
     const RunResult read = RunApp({path_, "SELECT x FROM t"});
     EXPECT_EQ(read.exit_code, 0);
-    EXPECT_EQ(read.out, "42\n");
+    EXPECT_EQ(read.out,
+              "| x  |\n"
+              "|----|\n"
+              "| 42 |\n");
 }
 
 TEST_F(CliApplicationFileTest, ReadonlyRejectsWrites) {
@@ -194,31 +201,44 @@ TEST_F(CliApplicationFileTest, ReadonlyMissingFileFails) {
 
 TEST(CliApplicationReplTest, ExecutesSqlAndQuits) {
     const RunResult r = RunApp({"--batch", ":memory:"},
-                               "SELECT 1+1;\n.quit\n");
+                               "SELECT 1+1 AS sum;\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "2\n");
+    EXPECT_EQ(r.out,
+              "| sum |\n"
+              "|-----|\n"
+              "| 2   |\n");
     EXPECT_TRUE(r.err.empty());
 }
 
 TEST(CliApplicationReplTest, EofEndsTheShell) {
-    const RunResult r = RunApp({"--batch", ":memory:"}, "SELECT 1;\n");
+    const RunResult r = RunApp({"--batch", ":memory:"}, "SELECT 1 AS one;\n");
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "1\n");
+    EXPECT_EQ(r.out,
+              "| one |\n"
+              "|-----|\n"
+              "| 1   |\n");
 }
 
 TEST(CliApplicationReplTest, MultilineSqlAccumulatesUntilSemicolon) {
     const RunResult r = RunApp({"--batch", ":memory:"},
-                               "SELECT\n1+2\n;\n.quit\n");
+                               "SELECT\n1+2 AS sum\n;\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "3\n");
+    EXPECT_EQ(r.out,
+              "| sum |\n"
+              "|-----|\n"
+              "| 3   |\n");
 }
 
 TEST(CliApplicationReplTest, SqlErrorDoesNotTerminateLoop) {
     const RunResult r = RunApp({"--batch", ":memory:"},
-                               "SELEKT 1;\nSELECT 2;\n.quit\n");
+                               "SELEKT 1;\nSELECT 2 AS two;\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_NE(r.err.find("Error:"), std::string::npos);
-    EXPECT_EQ(r.out, "2\n");   // the loop survived the bad statement
+    // the loop survived the bad statement
+    EXPECT_EQ(r.out,
+              "| two |\n"
+              "|-----|\n"
+              "| 2   |\n");
 }
 
 TEST(CliApplicationReplTest, StatePersistsAcrossStatements) {
@@ -227,7 +247,11 @@ TEST(CliApplicationReplTest, StatePersistsAcrossStatements) {
         "CREATE TABLE t (x);\nINSERT INTO t VALUES (7);\n"
         "SELECT x FROM t;\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "OK\nOK\n7\n");
+    EXPECT_EQ(r.out,
+              "OK\nOK\n"
+              "| x |\n"
+              "|---|\n"
+              "| 7 |\n");
 }
 
 TEST(CliApplicationReplTest, TablesCommandListsTables) {
@@ -235,7 +259,12 @@ TEST(CliApplicationReplTest, TablesCommandListsTables) {
         {"--batch", ":memory:"},
         "CREATE TABLE bbb (x);\nCREATE TABLE aaa (x);\n.tables\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "OK\nOK\naaa\nbbb\n");
+    EXPECT_EQ(r.out,
+              "OK\nOK\n"
+              "| name |\n"
+              "|------|\n"
+              "| aaa  |\n"
+              "| bbb  |\n");
 }
 
 TEST(CliApplicationReplTest, HelpCommandPrintsCommands) {
@@ -268,9 +297,12 @@ TEST(CliApplicationReplTest, BatchSuppressesPrompts) {
 TEST(CliApplicationReplTest, PendingInputRunsOnEof) {
     // No trailing semicolon: the official shell executes pending
     // input on exit; so do we.
-    const RunResult r = RunApp({"--batch", ":memory:"}, "SELECT 5");
+    const RunResult r = RunApp({"--batch", ":memory:"}, "SELECT 5 AS five");
     EXPECT_EQ(r.exit_code, 0);
-    EXPECT_EQ(r.out, "5\n");
+    EXPECT_EQ(r.out,
+              "| five |\n"
+              "|------|\n"
+              "| 5    |\n");
 }
 
 TEST(CliApplicationReplTest, ReadonlyAppliesInRepl) {

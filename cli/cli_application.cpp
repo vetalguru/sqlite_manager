@@ -38,7 +38,6 @@ int CliApplication::Run(int argc, char** argv) {
     bool version = false;
     bool readonly = false;
     bool batch = false;
-    Repl::Config repl_config;
 
     ArgParser parser;
     parser.Add({"--help", "-h"}, &help, "print this help and exit");
@@ -46,8 +45,6 @@ int CliApplication::Run(int argc, char** argv) {
                "print version information and exit");
     parser.Add({"--readonly"}, &readonly,
                "open the database in read-only mode");
-    parser.Add({"--align"}, &repl_config.align,
-               "align SELECT output columns by width");
     parser.Add({"--batch"}, &batch,
                "suppress interactive prompts");
 
@@ -89,19 +86,18 @@ int CliApplication::Run(int argc, char** argv) {
     }
 
     if (positional.size() == 2) {
-        return ExecuteSql(conn, positional[1], repl_config.align,
-                          out_, err_);
+        return ExecuteSql(conn, positional[1], out_, err_);
     }
 
     // Real terminal session: use line editing with history. isocline
     // detects non-TTY stdin itself and degrades to plain reads.
     if (&in_ == &std::cin && !batch) {
         IsoclineLineReader reader;
-        Repl repl(conn, repl_config, reader, out_, err_);
+        Repl repl(conn, reader, out_, err_);
         return repl.Run();
     }
     StreamLineReader reader(in_, out_, !batch);
-    Repl repl(conn, repl_config, reader, out_, err_);
+    Repl repl(conn, reader, out_, err_);
     return repl.Run();
 }
 

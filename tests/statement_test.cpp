@@ -99,6 +99,21 @@ TEST_F(StatementTest, ReadsAllRowsAndColumns) {
     EXPECT_EQ(step.value(), StepResult::kDone);
 }
 
+TEST_F(StatementTest, ColumnNameReturnsSourceOrAlias) {
+    auto stmt = Statement::Prepare(
+        conn_, "SELECT id, score AS points FROM t");
+    ASSERT_TRUE(stmt.ok());
+    Statement& s = stmt.value();
+
+    EXPECT_EQ(s.ColumnName(0), "id");       // source column name
+    EXPECT_EQ(s.ColumnName(1), "points");   // AS alias
+}
+
+TEST_F(StatementTest, ColumnNameOnEmptyStatementIsEmpty) {
+    Statement s;
+    EXPECT_TRUE(s.ColumnName(0).empty());
+}
+
 TEST_F(StatementTest, ColumnIsNullDetectsNull) {
     ASSERT_TRUE(conn_.Execute("INSERT INTO t (name) VALUES (NULL)").ok());
     auto stmt = Statement::Prepare(

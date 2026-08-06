@@ -64,6 +64,8 @@ public:
     // Contract: call only after Step() returned kRow, with a valid index.
     // Out-of-contract calls return 0/empty/NULL per SQLite semantics.
     int ColumnCount() const;
+    // Name of a result column (its AS alias, or the source expression).
+    std::string ColumnName(int index) const;
     std::int64_t ColumnInt64(int index) const;
     double ColumnDouble(int index) const;
     std::string ColumnText(int index) const;

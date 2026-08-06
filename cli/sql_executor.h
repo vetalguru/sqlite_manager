@@ -16,7 +16,7 @@ namespace sqlite_manager_cli {
 //
 // Shared by the single-shot mode and the REPL.
 int ExecuteSql(sqlite_manager::Connection& conn, const std::string& sql,
-               bool align, std::ostream& out, std::ostream& err);
+               std::ostream& out, std::ostream& err);
 
 }  // namespace sqlite_manager_cli
 

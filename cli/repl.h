@@ -21,12 +21,8 @@ class LineReader;
 // the start of a statement. EOF executes any pending input and exits.
 class Repl final {
 public:
-    struct Config {
-        bool align = false;   // align SELECT output columns
-    };
-
     // The connection, reader, and streams must outlive the object.
-    Repl(sqlite_manager::Connection& conn, Config config,
+    Repl(sqlite_manager::Connection& conn,
          LineReader& reader, std::ostream& out, std::ostream& err);
 
     // Runs the loop until EOF or .quit. Returns the exit code
@@ -39,7 +35,6 @@ private:
     void PrintHelp();
 
     sqlite_manager::Connection& conn_;
-    Config config_;
     LineReader& reader_;
     std::ostream& out_;
     std::ostream& err_;
