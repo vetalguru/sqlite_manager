@@ -16,6 +16,7 @@ target_compile_options(sqlite_manager_warnings INTERFACE
 
 add_subdirectory(third_party)
 add_subdirectory(src)
+add_subdirectory(cli)
 
 # Tests only when built as the top-level project
 if(PROJECT_IS_TOP_LEVEL)

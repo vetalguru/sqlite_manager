@@ -16,7 +16,14 @@ add_executable(sqlite_manager_tests
     result_test.cpp
     connection_test.cpp
     statement_test.cpp
-    transaction_test.cpp)
+    transaction_test.cpp
+    arg_parser_test.cpp
+    cli_application_test.cpp
+    ${PROJECT_SOURCE_DIR}/cli/arg_parser.cpp
+    ${PROJECT_SOURCE_DIR}/cli/cli_application.cpp)
+
+target_include_directories(sqlite_manager_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/cli)
 
 target_link_libraries(sqlite_manager_tests
     PRIVATE

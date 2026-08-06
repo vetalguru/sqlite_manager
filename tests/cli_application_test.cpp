@@ -1,0 +1,191 @@
+#include "cli_application.h"
+
+#include <gtest/gtest.h>
+
+#include <cstdio>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace sqlite_manager_cli {
+namespace {
+
+// Builds a fake argv. argv[0] is the program name.
+class ArgvBuilder {
+public:
+    explicit ArgvBuilder(std::vector<std::string> args)
+        : storage_(std::move(args)) {
+        pointers_.reserve(storage_.size() + 1);
+        static char program_name[] = "sqlite-manager";
+        pointers_.push_back(program_name);
+        for (std::string& arg : storage_) {
+            pointers_.push_back(arg.data());
+        }
+    }
+
+    int argc() const { return static_cast<int>(pointers_.size()); }
+    char** argv() { return pointers_.data(); }
+
+private:
+    std::vector<std::string> storage_;
+    std::vector<char*> pointers_;
+};
+
+// Runs the application with given args, captures exit code and output.
+struct RunResult {
+    int exit_code = -1;
+    std::string out;
+    std::string err;
+};
+
+RunResult RunApp(std::vector<std::string> args) {
+    std::ostringstream out;
+    std::ostringstream err;
+    CliApplication app(out, err);
+
+    ArgvBuilder argv(std::move(args));
+    RunResult result;
+    result.exit_code = app.Run(argv.argc(), argv.argv());
+    result.out = out.str();
+    result.err = err.str();
+    return result;
+}
+
+// ---------- meta options ----------
+
+TEST(CliApplicationTest, HelpPrintsUsageAndExitsZero) {
+    const RunResult r = RunApp({"--help"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.out.find("Usage: sqlite-manager"), std::string::npos);
+    EXPECT_NE(r.out.find("--readonly"), std::string::npos);
+    EXPECT_TRUE(r.err.empty());
+}
+
+TEST(CliApplicationTest, VersionPrintsBothVersions) {
+    const RunResult r = RunApp({"--version"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.out.find("sqlite-manager 0."), std::string::npos);
+    EXPECT_NE(r.out.find("SQLite 3."), std::string::npos);
+}
+
+// ---------- argument errors ----------
+
+TEST(CliApplicationTest, MissingArgumentsFails) {
+    const RunResult r = RunApp({});
+    EXPECT_EQ(r.exit_code, 1);
+    EXPECT_NE(r.err.find("Expected <database> and <sql>"),
+              std::string::npos);
+    EXPECT_TRUE(r.out.empty());
+}
+
+TEST(CliApplicationTest, UnknownOptionFailsWithUsage) {
+    const RunResult r = RunApp({"--nope", ":memory:", "SELECT 1"});
+    EXPECT_EQ(r.exit_code, 1);
+    EXPECT_NE(r.err.find("Unknown option: --nope"), std::string::npos);
+    EXPECT_NE(r.err.find("Usage:"), std::string::npos);
+}
+
+// ---------- SQL execution ----------
+
+TEST(CliApplicationTest, SelectPrintsRows) {
+    const RunResult r = RunApp({":memory:", "SELECT 1+1, 'hi'"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "2 | hi\n");
+    EXPECT_TRUE(r.err.empty());
+}
+
+TEST(CliApplicationTest, NullPrintsAsNULL) {
+    const RunResult r = RunApp({":memory:", "SELECT NULL"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "NULL\n");
+}
+
+TEST(CliApplicationTest, DdlPrintsOk) {
+    const RunResult r = RunApp({":memory:", "CREATE TABLE t (x)"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "OK\n");
+}
+
+TEST(CliApplicationTest, BatchPrintsOk) {
+    const RunResult r = RunApp(
+        {":memory:", "CREATE TABLE t (x); INSERT INTO t VALUES (1);"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "OK\n");
+}
+
+TEST(CliApplicationTest, InvalidSqlFails) {
+    const RunResult r = RunApp({":memory:", "SELEKT 1"});
+    EXPECT_EQ(r.exit_code, 1);
+    EXPECT_NE(r.err.find("Error:"), std::string::npos);
+    EXPECT_TRUE(r.out.empty());
+}
+
+TEST(CliApplicationTest, SqlCommentIsValidEmptyBatch) {
+    const RunResult r = RunApp({":memory:", "--", "--just a comment"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "OK\n");
+}
+
+TEST(CliApplicationTest, DashSqlReachesSqliteNotParser) {
+    const RunResult r = RunApp({":memory:", "--", "-broken"});
+    EXPECT_EQ(r.exit_code, 1);
+    EXPECT_EQ(r.err.find("Unknown option"), std::string::npos);
+    EXPECT_NE(r.err.find("Error:"), std::string::npos);
+}
+
+// ---------- output formats ----------
+
+TEST(CliApplicationTest, PipeFormatByDefault) {
+    const RunResult r = RunApp(
+        {":memory:", "SELECT 1, 'x' UNION ALL SELECT 22, 'y'"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "1 | x\n22 | y\n");
+}
+
+TEST(CliApplicationTest, AlignPadsColumns) {
+    const RunResult r = RunApp(
+        {"--align", ":memory:", "SELECT 1, 'x' UNION ALL SELECT 22, 'y'"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "1  | x\n22 | y\n");
+}
+
+// ---------- file database and readonly ----------
+
+class CliApplicationFileTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        path_ = ::testing::TempDir() + "cli_app_test.sqlite";
+        std::remove(path_.c_str());
+    }
+    void TearDown() override { std::remove(path_.c_str()); }
+
+    std::string path_;
+};
+
+TEST_F(CliApplicationFileTest, DataPersistsBetweenRuns) {
+    const RunResult create = RunApp(
+        {path_, "CREATE TABLE t (x); INSERT INTO t VALUES (42);"});
+    ASSERT_EQ(create.exit_code, 0);
+
+    const RunResult read = RunApp({path_, "SELECT x FROM t"});
+    EXPECT_EQ(read.exit_code, 0);
+    EXPECT_EQ(read.out, "42\n");
+}
+
+TEST_F(CliApplicationFileTest, ReadonlyRejectsWrites) {
+    ASSERT_EQ(RunApp({path_, "CREATE TABLE t (x)"}).exit_code, 0);
+
+    const RunResult r = RunApp(
+        {"--readonly", path_, "INSERT INTO t VALUES (1)"});
+    EXPECT_EQ(r.exit_code, 1);
+    EXPECT_NE(r.err.find("readonly"), std::string::npos);
+}
+
+TEST_F(CliApplicationFileTest, ReadonlyMissingFileFails) {
+    const RunResult r = RunApp({"--readonly", path_, "SELECT 1"});
+    EXPECT_EQ(r.exit_code, 1);
+    EXPECT_NE(r.err.find("Cannot open"), std::string::npos);
+}
+
+}  // namespace
+}  // namespace sqlite_manager_cli
