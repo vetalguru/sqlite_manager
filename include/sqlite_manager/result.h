@@ -12,7 +12,11 @@ namespace sqlite_manager {
 template <typename T>
 class [[nodiscard]] Result {
 public:
+    // Implicit by design (like absl::StatusOr): lets callers write
+    // `return value;` or `return error;` from a Result-returning function.
+    // NOLINTNEXTLINE(google-explicit-constructor)
     Result(T value) : data_(std::move(value)) {}
+    // NOLINTNEXTLINE(google-explicit-constructor)
     Result(Error error) : data_(std::move(error)) {}
 
     bool ok() const { return std::holds_alternative<T>(data_); }

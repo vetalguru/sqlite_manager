@@ -1,0 +1,13 @@
+# Test code uses idioms the default profile would flag as problems:
+#   - it touches moved-from objects on purpose, to assert the donor is
+#     left in a valid empty state (move-semantics tests);
+#   - it uses C-style char[] for argv fixtures;
+#   - it favors brevity over const-correctness on local fixtures.
+# Inherit the root .clang-tidy and relax just those checks for tests.
+InheritParentConfig: true
+
+Checks: >
+  -bugprone-use-after-move,
+  -clang-analyzer-cplusplus.Move,
+  -misc-const-correctness,
+  -modernize-avoid-c-arrays

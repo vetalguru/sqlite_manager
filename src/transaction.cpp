@@ -9,7 +9,7 @@ namespace sqlite_manager {
 Result<Transaction> Transaction::Begin(Connection& conn) {
     // Execute() itself reports kMisuse on a closed connection, and
     // SQLite reports an error if a transaction is already active.
-    Status s = conn.Execute("BEGIN");
+    const Status s = conn.Execute("BEGIN");
     if (!s.ok()) {
         return s.error();
     }

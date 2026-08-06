@@ -11,3 +11,5 @@ target_include_directories(sqlite_manager PUBLIC
 target_link_libraries(sqlite_manager
     PUBLIC sqlite3
     PRIVATE sqlite_manager_warnings)
+
+sqlite_manager_enable_lint(sqlite_manager)

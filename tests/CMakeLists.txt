@@ -28,5 +28,7 @@ target_link_libraries(sqlite_manager_tests
         sqlite_manager_warnings
         GTest::gtest_main)
 
+sqlite_manager_enable_lint(sqlite_manager_tests)
+
 include(GoogleTest)
 gtest_discover_tests(sqlite_manager_tests)

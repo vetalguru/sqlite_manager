@@ -17,6 +17,8 @@ target_link_libraries(sqlite_manager_cli_lib
 
 target_link_libraries(sqlite_manager_cli_lib PRIVATE isocline)
 
+sqlite_manager_enable_lint(sqlite_manager_cli_lib)
+
 add_executable(sqlite_manager_cli main.cpp)
 
 set_target_properties(sqlite_manager_cli PROPERTIES OUTPUT_NAME sqlite-manager)
@@ -25,3 +27,5 @@ target_link_libraries(sqlite_manager_cli
     PRIVATE
         sqlite_manager_cli_lib
         sqlite_manager_warnings)
+
+sqlite_manager_enable_lint(sqlite_manager_cli)

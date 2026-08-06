@@ -97,8 +97,10 @@ bool ArgParser::Parse(int argc, char** argv) {
         }
         if (auto* number = std::get_if<long*>(&option->dest)) {
             if (!ParseLong(value, **number)) {
-                error_ = "Option " + name +
-                         " expects an integer, got: " + value;
+                error_ = "Option ";
+                error_ += name;
+                error_ += " expects an integer, got: ";
+                error_ += value;
                 return false;
             }
             continue;

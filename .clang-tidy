@@ -1,0 +1,41 @@
+# Static analysis for project code only. Third-party sources
+# (third_party/sqlite, third_party/isocline) and GoogleTest are excluded
+# via HeaderFilterRegex and by wiring clang-tidy onto our targets only.
+#
+# Run standalone (needs a compile_commands.json, e.g. the linux-debug preset):
+#   clang-tidy -p build/debug src/*.cpp cli/*.cpp
+# Or as part of the build:
+#   cmake --preset linux-debug -DSQLITE_MANAGER_ENABLE_CLANG_TIDY=ON
+#   cmake --build build/debug
+
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  google-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  -modernize-use-trailing-return-type,
+  -modernize-use-nodiscard,
+  -modernize-return-braced-init-list,
+  -readability-braces-around-statements,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-enum-initial-value,
+  -bugprone-easily-swappable-parameters,
+  -google-runtime-int,
+  -performance-enum-size,
+  -performance-no-int-to-ptr
+
+# Advisory by default: findings are warnings, they do not fail the build.
+WarningsAsErrors: ''
+
+# Only diagnose our own headers, never third-party or GoogleTest ones.
+HeaderFilterRegex: '(include/sqlite_manager/|/cli/)'
+
+FormatStyle: none
