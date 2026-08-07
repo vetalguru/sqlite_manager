@@ -9,6 +9,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Per-component versions: MAJOR.MINOR from CMake, PATCH auto from git.
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+include(GitVersion)
+
 # Strict warnings for project code only (not for sqlite3.c)
 add_library(sqlite_manager_warnings INTERFACE)
 target_compile_options(sqlite_manager_warnings INTERFACE

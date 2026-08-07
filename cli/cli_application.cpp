@@ -6,6 +6,7 @@
 #include <string>
 
 #include "arg_parser.h"
+#include "cli_version.h"
 #include "line_reader.h"
 #include "repl.h"
 #include "result_view.h"
@@ -60,11 +61,9 @@ int CliApplication::Run(int argc, char** argv) {
         return 0;
     }
     if (version) {
-        out_ << "sqlite-manager "
-             << sqlite_manager::kVersionMajor << '.'
-             << sqlite_manager::kVersionMinor << '.'
-             << sqlite_manager::kVersionPatch
-             << " (SQLite " << sqlite_manager::SqliteVersion() << ")\n";
+        out_ << "sqlite-manager " << kVersionString
+             << " (libsqlite_manager " << sqlite_manager::kVersionString
+             << ", SQLite " << sqlite_manager::SqliteVersion() << ")\n";
         return 0;
     }
 

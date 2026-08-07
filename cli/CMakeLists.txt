@@ -11,6 +11,24 @@ add_library(sqlite_manager_cli_lib STATIC
 target_include_directories(sqlite_manager_cli_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
 
+# CLI version: its own MAJOR.MINOR (independent of the library); PATCH
+# counts commits to cli/, src/, and include/ since the last "cli-v*" tag.
+set(SQLITE_MANAGER_CLI_MAJOR 0)
+set(SQLITE_MANAGER_CLI_MINOR 1)
+sqlite_manager_git_version(
+    OUT SQLITE_MANAGER_CLI
+    MAJOR ${SQLITE_MANAGER_CLI_MAJOR}
+    MINOR ${SQLITE_MANAGER_CLI_MINOR}
+    TAG_MATCH "cli-v*"
+    PATHS cli src include)
+
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cli_version.h.in
+    ${PROJECT_BINARY_DIR}/generated/cli_version.h
+    @ONLY)
+target_include_directories(sqlite_manager_cli_lib PUBLIC
+    ${PROJECT_BINARY_DIR}/generated)
+
 target_link_libraries(sqlite_manager_cli_lib
     PUBLIC sqlite_manager
     PRIVATE sqlite_manager_warnings)
