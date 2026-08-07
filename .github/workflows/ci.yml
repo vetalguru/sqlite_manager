@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: ${{ matrix.preset }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { preset: linux-debug,   dir: build/debug }
+          - { preset: linux-release, dir: build/release }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history and tags: the build derives the version from git
+          # (commit count since the last release tag). A shallow clone
+          # would produce a wrong PATCH.
+          fetch-depth: 0
+
+      - name: Install build tools
+        run: sudo apt-get update &&
+             sudo apt-get install -y ninja-build clang-tidy dpkg-dev
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+             -DSQLITE_MANAGER_ENABLE_CLANG_TIDY=ON
+
+      - name: Build
+        run: cmake --build ${{ matrix.dir }}
+
+      - name: Test
+        run: ctest --test-dir ${{ matrix.dir }} --output-on-failure
+
+      - name: Package (.deb)
+        if: matrix.preset == 'linux-release'
+        run: cd ${{ matrix.dir }} && cpack -G DEB
+
+      - name: Upload .deb
+        if: matrix.preset == 'linux-release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-manager-deb
+          path: ${{ matrix.dir }}/*.deb
+          if-no-files-found: error
