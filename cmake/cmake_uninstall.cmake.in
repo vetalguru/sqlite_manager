@@ -1,0 +1,21 @@
+# Removes every file recorded in install_manifest.txt, i.e. undoes a
+# `cmake --install`. Driven by the "uninstall" target (see CMakeLists.txt).
+# Deb installs are removed with `apt remove sqlite-manager` instead.
+
+set(manifest "@PROJECT_BINARY_DIR@/install_manifest.txt")
+
+if(NOT EXISTS "${manifest}")
+    message(FATAL_ERROR
+        "Cannot find install manifest: ${manifest}. Run `cmake --install` first.")
+endif()
+
+file(STRINGS "${manifest}" files)
+foreach(file ${files})
+    set(path "$ENV{DESTDIR}${file}")
+    if(EXISTS "${path}" OR IS_SYMLINK "${path}")
+        message(STATUS "Removing ${path}")
+        file(REMOVE "${path}")
+    else()
+        message(STATUS "Skipping ${path} (already gone)")
+    endif()
+endforeach()

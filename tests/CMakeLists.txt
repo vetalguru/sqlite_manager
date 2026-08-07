@@ -9,6 +9,11 @@ FetchContent_Declare(
 # Prevent GTest from overriding compiler/linker options on Windows
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
+# Do not install GoogleTest: it is a test-only dependency and must not
+# leak into our package (it would ship gtest headers/libs and, worse,
+# remove them from the system on `apt remove`).
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(googletest)
 
 add_executable(sqlite_manager_tests

@@ -51,3 +51,38 @@ if(PROJECT_IS_TOP_LEVEL)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# Packaging: build a .deb of the CLI with, from the build directory:
+#   cpack -G DEB
+# The package wraps the statically linked sqlite-manager binary; its
+# version follows the CLI's (MAJOR.MINOR from CMake, PATCH from git).
+if(PROJECT_IS_TOP_LEVEL)
+    set(CPACK_PACKAGE_NAME "sqlite-manager")
+    set(CPACK_PACKAGE_VERSION "${SQLITE_MANAGER_CLI_VERSION}")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+        "Command-line shell for SQLite databases")
+    set(CPACK_PACKAGE_CONTACT "VS <vetalguru@gmail.com>")
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+
+    set(CPACK_GENERATOR "DEB")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "database")
+    set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+    # Auto-detect runtime deps (libc, libstdc++, ...) via dpkg-shlibdeps.
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    # Standard "<name>_<version>_<arch>.deb" file name.
+    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+
+    include(CPack)
+endif()
+
+# Uninstall for the direct `cmake --install` path (deb installs use
+# `apt remove sqlite-manager`). Removes exactly what was installed, per
+# install_manifest.txt.
+if(PROJECT_IS_TOP_LEVEL AND NOT TARGET uninstall)
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake
+        @ONLY)
+    add_custom_target(uninstall
+        COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+endif()

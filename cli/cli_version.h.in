@@ -5,9 +5,9 @@
 // its generated copy in the build tree.
 //
 // MAJOR.MINOR are set by hand in cli/CMakeLists.txt. PATCH is the number
-// of commits touching cli/, src/, or include/ since the last "cli-v*"
-// release tag (the CLI statically links the library, so a library change
-// also changes the CLI binary). See cmake/GitVersion.cmake.
+// of commits touching cli/, man/, src/, or include/ since the last
+// "cli-v*" release tag (the CLI statically links the library, so a
+// library change also changes the CLI binary). See cmake/GitVersion.cmake.
 
 namespace sqlite_manager_cli {
 

@@ -1,0 +1,94 @@
+.TH SQLITE-MANAGER 1 "August 2026" "sqlite-manager" "User Commands"
+.SH NAME
+sqlite\-manager \- command-line shell for SQLite databases
+.SH SYNOPSIS
+.B sqlite\-manager
+[\fIOPTIONS\fR]
+.I database
+.RI [ sql ]
+.SH DESCRIPTION
+.B sqlite\-manager
+opens the SQLite database file
+.I database
+and either runs a single SQL command or starts an interactive shell.
+.PP
+If
+.I sql
+is given, it is executed and the program exits. Otherwise
+.B sqlite\-manager
+starts an interactive shell that reads SQL statements terminated by a
+semicolon and prints query results as an aligned table.
+.PP
+Use the special name
+.B :memory:
+for a temporary in-memory database.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print a usage summary and exit.
+.TP
+.B \-\-version
+Print version information for the tool, the bundled library, and SQLite,
+then exit.
+.TP
+.B \-\-readonly
+Open the database in read-only mode; writes fail. The file must exist.
+.TP
+.B \-\-batch
+Suppress interactive prompts. Useful when reading SQL from a pipe or file.
+.SH "INTERACTIVE SHELL"
+Statements are accumulated until a terminating semicolon, then executed.
+The following dot commands are recognized at the start of a statement:
+.TP
+.B .help
+Show the list of dot commands.
+.TP
+.B .tables
+List the tables in the database.
+.TP
+.BR .quit ", " .exit
+Leave the shell. End-of-input (Ctrl\-D) does the same.
+.SH "EXIT STATUS"
+.TP
+.B 0
+Success.
+.TP
+.B 1
+A usage error occurred, the database could not be opened, or a statement
+failed.
+.SH EXAMPLES
+Run one query and exit:
+.PP
+.RS
+.nf
+sqlite\-manager data.db "SELECT * FROM users"
+.fi
+.RE
+.PP
+Create a table in a new database:
+.PP
+.RS
+.nf
+sqlite\-manager data.db "CREATE TABLE t (id INTEGER, name TEXT)"
+.fi
+.RE
+.PP
+Start an interactive shell on an in-memory database:
+.PP
+.RS
+.nf
+sqlite\-manager :memory:
+.fi
+.RE
+.PP
+Feed statements from a file in batch mode:
+.PP
+.RS
+.nf
+sqlite\-manager \-\-batch data.db < script.sql
+.fi
+.RE
+.SH "SEE ALSO"
+.BR sqlite3 (1)
+.SH AUTHOR
+Written by VS.
