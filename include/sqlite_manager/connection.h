@@ -50,6 +50,11 @@ public:
     // on this connection, or 0 if none (or the connection is closed).
     std::int64_t Changes() const;
 
+    // Sets how long a locked database is retried before an operation
+    // gives up with kBusy. Zero (the default) disables the wait and
+    // fails immediately. Fails with kMisuse if the connection is closed.
+    Status BusyTimeout(int milliseconds);
+
     // Escape hatch for layers that need the raw handle (Statement will)
     sqlite3* raw() const { return db_; }
 

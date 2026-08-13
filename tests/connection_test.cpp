@@ -160,6 +160,22 @@ TEST(ConnectionTest, ChangesOnClosedConnectionIsZero) {
     EXPECT_EQ(conn.Changes(), 0);
 }
 
+// ---------- BusyTimeout ----------
+
+TEST(ConnectionTest, BusyTimeoutSucceedsOnOpenConnection) {
+    Connection conn;
+    ASSERT_TRUE(conn.Open(":memory:").ok());
+    EXPECT_TRUE(conn.BusyTimeout(500).ok());
+    EXPECT_TRUE(conn.BusyTimeout(0).ok());   // 0 disables the wait
+}
+
+TEST(ConnectionTest, BusyTimeoutOnClosedConnectionFailsWithMisuse) {
+    Connection conn;
+    const Status s = conn.BusyTimeout(100);
+    ASSERT_FALSE(s.ok());
+    EXPECT_EQ(s.error().code, ErrorCode::kMisuse);
+}
+
 // ---------- Move semantics ----------
 
 TEST(ConnectionTest, MoveConstructorTransfersOwnership) {
