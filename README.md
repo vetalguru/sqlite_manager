@@ -64,10 +64,89 @@ Options: `-h`/`--help`, `--version`, `--readonly` (open read-only),
 `--batch` (suppress interactive prompts, for piping SQL from a file),
 `--format table|csv|json` (query output format; `table` is the default).
 
+## Usage
+
+The examples below call `sqlite-manager` for brevity; if you have not installed
+the `.deb`, use the built binary at `./build/debug/cli/sqlite-manager`.
+
+### Create and query a database
+
 ```bash
-# CSV or JSON output, e.g. to pipe into other tools
-./build/debug/cli/sqlite-manager --format csv  data.db "SELECT * FROM users"
-./build/debug/cli/sqlite-manager --format json data.db "SELECT * FROM users"
+sqlite-manager app.db "CREATE TABLE ammo (id INTEGER, name TEXT, grains REAL)"
+sqlite-manager app.db "INSERT INTO ammo VALUES (1,'M855',62.0),(2,'SMK 175',175.0)"
+sqlite-manager app.db "SELECT * FROM ammo"
+```
+
+```
++----+---------+--------+
+| id | name    | grains |
++----+---------+--------+
+| 1  | M855    | 62.0   |
+| 2  | SMK 175 | 175.0  |
++----+---------+--------+
+```
+
+### Output formats
+
+```bash
+sqlite-manager --format csv app.db "SELECT id, name FROM ammo"
+```
+
+```
+id,name
+1,M855
+2,SMK 175
+```
+
+```bash
+# JSON pipes cleanly into jq and friends
+sqlite-manager --format json app.db "SELECT id, name FROM ammo" | jq '.[].name'
+```
+
+```
+"M855"
+"SMK 175"
+```
+
+### Interactive shell
+
+```
+$ sqlite-manager app.db
+sql> .tables
++------+
+| name |
++------+
+| ammo |
++------+
+sql> SELECT count(*) AS n FROM ammo;
++---+
+| n |
++---+
+| 2 |
++---+
+sql> .quit
+```
+
+### Batch mode: pipe a script
+
+```bash
+sqlite-manager --batch app.db < schema.sql
+
+sqlite-manager --batch app.db <<'SQL'
+CREATE TABLE t (x);
+INSERT INTO t VALUES (1), (2), (3);
+SELECT sum(x) AS total FROM t;
+SQL
+```
+
+### Scratch and read-only
+
+```bash
+# in-memory database, nothing written to disk
+sqlite-manager :memory: "SELECT 6 * 7 AS answer"
+
+# open read-only; writes are rejected
+sqlite-manager --readonly app.db "SELECT * FROM ammo"
 ```
 
 ## Tests
