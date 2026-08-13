@@ -1,0 +1,32 @@
+name: Lint
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Full history and tags: configure derives the version from git.
+          fetch-depth: 0
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang-tidy
+
+      - name: Configure (generate compile_commands.json)
+        run: cmake --preset linux-debug
+
+      - name: clang-tidy (findings fail the build)
+        run: clang-tidy -p build/debug --warnings-as-errors='*'
+             src/*.cpp cli/*.cpp tests/*.cpp

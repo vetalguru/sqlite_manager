@@ -32,7 +32,8 @@ Checks: >
   -performance-enum-size,
   -performance-no-int-to-ptr
 
-# Advisory by default: findings are warnings, they do not fail the build.
+# Advisory locally (findings are warnings). The dedicated Lint workflow
+# runs clang-tidy with --warnings-as-errors so CI gates on any finding.
 WarningsAsErrors: ''
 
 # Only diagnose our own headers, never third-party or GoogleTest ones.
