@@ -20,17 +20,38 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "linux-asan",
+            "displayName": "Linux ASan+UBSan",
+            "inherits": "linux-debug",
+            "binaryDir": "${sourceDir}/build/asan",
+            "cacheVariables": {
+                "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all",
+                "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+            }
         }
     ],
     "buildPresets": [
         { "name": "linux-debug", "configurePreset": "linux-debug" },
-        { "name": "linux-release", "configurePreset": "linux-release" }
+        { "name": "linux-release", "configurePreset": "linux-release" },
+        { "name": "linux-asan", "configurePreset": "linux-asan" }
     ],
     "testPresets": [
         {
             "name": "linux-debug",
             "configurePreset": "linux-debug",
             "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "linux-asan",
+            "configurePreset": "linux-asan",
+            "output": { "outputOnFailure": true },
+            "environment": {
+                "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+                "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
+            }
         }
     ]
 }
