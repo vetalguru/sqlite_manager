@@ -53,13 +53,21 @@ In the shell, statements end with `;`. Dot commands: `.help`, `.tables`,
 
 ```
 sql> SELECT 1 AS id, 'M855' AS name;
++----+------+
 | id | name |
-|----|------|
++----+------+
 | 1  | M855 |
++----+------+
 ```
 
 Options: `-h`/`--help`, `--version`, `--readonly` (open read-only),
-`--batch` (suppress interactive prompts, for piping SQL from a file).
+`--batch` (suppress interactive prompts, for piping SQL from a file),
+`--format table|csv` (query output format; `table` is the default).
+
+```bash
+# CSV output, e.g. to pipe into other tools
+./build/debug/cli/sqlite-manager --format csv data.db "SELECT * FROM users"
+```
 
 ## Tests
 

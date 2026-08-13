@@ -156,6 +156,28 @@ TEST(CliApplicationTest, ColumnsArePaddedToWidestValue) {
               "+----+---+\n");
 }
 
+TEST(CliApplicationTest, CsvFormatOutput) {
+    const RunResult r = RunApp(
+        {"--format", "csv", ":memory:",
+         "SELECT 1 AS a, 'x' AS b UNION ALL SELECT 22, 'y'"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "a,b\n1,x\n22,y\n");
+}
+
+TEST(CliApplicationTest, CsvQuotesSpecialFieldsAndEmptiesNull) {
+    const RunResult r = RunApp(
+        {"--format", "csv", ":memory:", "SELECT 'a,b' AS c, NULL AS d"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out, "c,d\n\"a,b\",\n");
+}
+
+TEST(CliApplicationTest, UnknownFormatFails) {
+    const RunResult r = RunApp({"--format", "xml", ":memory:", "SELECT 1"});
+    EXPECT_EQ(r.exit_code, 1);
+    EXPECT_NE(r.err.find("Unknown format"), std::string::npos);
+    EXPECT_TRUE(r.out.empty());
+}
+
 // ---------- file database and readonly ----------
 
 class CliApplicationFileTest : public ::testing::Test {

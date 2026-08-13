@@ -29,8 +29,8 @@ std::string Trim(const std::string& text) {
 }  // namespace
 
 Repl::Repl(sqlite_manager::Connection& conn, LineReader& reader,
-           std::ostream& out, std::ostream& err)
-    : conn_(conn), reader_(reader), out_(out), err_(err) {}
+           const ResultView& view, std::ostream& out, std::ostream& err)
+    : conn_(conn), reader_(reader), view_(view), out_(out), err_(err) {}
 
 void Repl::PrintHelp() {
     out_ << "Enter SQL terminated by ';'. Dot commands:\n"
@@ -51,7 +51,7 @@ bool Repl::HandleDotCommand(const std::string& command) {
         ExecuteSql(conn_,
                    "SELECT name FROM sqlite_master "
                    "WHERE type = 'table' ORDER BY name;",
-                   out_, err_);
+                   view_, out_, err_);
         return false;
     }
     err_ << "Unknown command: " << command << " (try .help)\n";
@@ -81,7 +81,7 @@ int Repl::Run() {
         buffer += '\n';
 
         if (IsCompleteSql(buffer)) {
-            ExecuteSql(conn_, buffer, out_, err_);
+            ExecuteSql(conn_, buffer, view_, out_, err_);
             buffer.clear();
         } else if (Trim(buffer).empty()) {
             buffer.clear();   // blank input, no continuation prompt
@@ -91,7 +91,7 @@ int Repl::Run() {
     // EOF with a non-empty buffer: execute what we have (mirrors the
     // official sqlite3 shell, which runs the pending input on exit).
     if (!Trim(buffer).empty()) {
-        ExecuteSql(conn_, buffer, out_, err_);
+        ExecuteSql(conn_, buffer, view_, out_, err_);
     }
     return 0;
 }
