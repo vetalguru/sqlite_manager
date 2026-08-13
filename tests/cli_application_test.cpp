@@ -171,6 +171,18 @@ TEST(CliApplicationTest, CsvQuotesSpecialFieldsAndEmptiesNull) {
     EXPECT_EQ(r.out, "c,d\n\"a,b\",\n");
 }
 
+TEST(CliApplicationTest, JsonFormatOutput) {
+    const RunResult r = RunApp(
+        {"--format", "json", ":memory:",
+         "SELECT 1 AS id, 'x' AS name UNION ALL SELECT 2, NULL"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out,
+              "[\n"
+              "  {\"id\": \"1\", \"name\": \"x\"},\n"
+              "  {\"id\": \"2\", \"name\": null}\n"
+              "]\n");
+}
+
 TEST(CliApplicationTest, UnknownFormatFails) {
     const RunResult r = RunApp({"--format", "xml", ":memory:", "SELECT 1"});
     EXPECT_EQ(r.exit_code, 1);

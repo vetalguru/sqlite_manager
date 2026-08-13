@@ -115,5 +115,43 @@ TEST(CsvViewTest, EmptyResultPrintsHeaderOnly) {
     EXPECT_EQ(RenderCsv(r), "a,b\n");
 }
 
+// ---------- JsonView ----------
+
+std::string RenderJson(const QueryResult& result) {
+    std::ostringstream out;
+    JsonView().Render(result, out);
+    return out.str();
+}
+
+TEST(JsonViewTest, RendersArrayOfObjectsWithNull) {
+    QueryResult r;
+    r.columns = {"id", "name"};
+    r.rows = {
+        {std::string("1"), std::string("M855")},
+        {std::string("2"), std::nullopt},
+    };
+    EXPECT_EQ(RenderJson(r),
+              "[\n"
+              "  {\"id\": \"1\", \"name\": \"M855\"},\n"
+              "  {\"id\": \"2\", \"name\": null}\n"
+              "]\n");
+}
+
+TEST(JsonViewTest, EscapesStringValues) {
+    QueryResult r;
+    r.columns = {"k"};
+    r.rows = {{std::string("a\"b\\c\n")}};
+    EXPECT_EQ(RenderJson(r),
+              "[\n"
+              "  {\"k\": \"a\\\"b\\\\c\\n\"}\n"
+              "]\n");
+}
+
+TEST(JsonViewTest, EmptyResultIsEmptyArray) {
+    QueryResult r;
+    r.columns = {"a", "b"};
+    EXPECT_EQ(RenderJson(r), "[]\n");
+}
+
 }  // namespace
 }  // namespace sqlite_manager_cli
