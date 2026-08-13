@@ -14,9 +14,9 @@ namespace sqlite_manager_cli {
 
 namespace {
 
-// How a SQL NULL cell is shown in a table.
-std::string TableCell(const QueryResult::Cell& cell) {
-    return cell.value_or("NULL");
+// How a cell is shown in a table: its text, or "NULL" for SQL NULL.
+std::string TableCell(const Cell& cell) {
+    return cell.type == ValueType::kNull ? std::string("NULL") : cell.text;
 }
 
 // RFC 4180 field: quote it when it contains a comma, double quote, CR or
@@ -120,8 +120,10 @@ void CsvView::Render(const QueryResult& result, std::ostream& out) const {
     for (const auto& row : result.rows) {
         for (std::size_t i = 0; i < columns; ++i) {
             if (i > 0) out << ',';
+            const Cell& cell = row[i];
             // SQL NULL becomes an empty field.
-            out << CsvField(row[i].value_or(std::string()));
+            out << CsvField(cell.type == ValueType::kNull ? std::string()
+                                                          : cell.text);
         }
         out << '\n';
     }
@@ -137,11 +139,20 @@ void JsonView::Render(const QueryResult& result, std::ostream& out) const {
         for (std::size_t i = 0; i < columns; ++i) {
             if (i > 0) out << ", ";
             out << JsonString(result.columns[i]) << ": ";
-            const QueryResult::Cell& cell = row[i];
-            if (cell.has_value()) {
-                out << JsonString(*cell);
-            } else {
-                out << "null";
+            const Cell& cell = row[i];
+            switch (cell.type) {
+                case ValueType::kNull:
+                    out << "null";
+                    break;
+                case ValueType::kInteger:
+                case ValueType::kFloat:
+                    // SQLite's text form of a number is a valid JSON number.
+                    out << cell.text;
+                    break;
+                case ValueType::kText:
+                case ValueType::kBlob:
+                    out << JsonString(cell.text);
+                    break;
             }
         }
         out << '}';

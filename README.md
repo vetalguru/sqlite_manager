@@ -99,7 +99,20 @@ id,name
 ```
 
 ```bash
-# JSON pipes cleanly into jq and friends
+sqlite-manager --format json app.db "SELECT id, name FROM ammo"
+```
+
+```json
+[
+  {"id": 1, "name": "M855"},
+  {"id": 2, "name": "SMK 175"}
+]
+```
+
+Values keep their JSON types — numbers stay unquoted (`1`, not `"1"`) and SQL
+NULL becomes `null`. It pipes cleanly into jq:
+
+```bash
 sqlite-manager --format json app.db "SELECT id, name FROM ammo" | jq '.[].name'
 ```
 

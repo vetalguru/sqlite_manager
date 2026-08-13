@@ -37,9 +37,9 @@ public:
     void Render(const QueryResult& result, std::ostream& out) const override;
 };
 
-// JSON: an array of one object per row, keyed by column name. Values are
-// emitted as JSON strings (the model carries display text, not types);
-// SQL NULL renders as JSON null. Strings are escaped per RFC 8259.
+// JSON: an array of one object per row, keyed by column name. Integers
+// and reals are emitted as JSON numbers, text and blobs as strings
+// (escaped per RFC 8259), and SQL NULL as null.
 class JsonView final : public ResultView {
 public:
     void Render(const QueryResult& result, std::ostream& out) const override;

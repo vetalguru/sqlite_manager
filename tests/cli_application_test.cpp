@@ -178,8 +178,18 @@ TEST(CliApplicationTest, JsonFormatOutput) {
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_EQ(r.out,
               "[\n"
-              "  {\"id\": \"1\", \"name\": \"x\"},\n"
-              "  {\"id\": \"2\", \"name\": null}\n"
+              "  {\"id\": 1, \"name\": \"x\"},\n"
+              "  {\"id\": 2, \"name\": null}\n"
+              "]\n");
+}
+
+TEST(CliApplicationTest, JsonEmitsNumbersUnquoted) {
+    const RunResult r = RunApp(
+        {"--format", "json", ":memory:", "SELECT 42 AS i, 1.5 AS r"});
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.out,
+              "[\n"
+              "  {\"i\": 42, \"r\": 1.5}\n"
               "]\n");
 }
 

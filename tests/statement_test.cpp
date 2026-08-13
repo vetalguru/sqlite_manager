@@ -109,6 +109,21 @@ TEST_F(StatementTest, ColumnNamesComeFromSql) {
     EXPECT_EQ(s.ColumnName(2), "doubled");
 }
 
+TEST_F(StatementTest, ColumnTypeReflectsStorageClass) {
+    auto stmt = Statement::Prepare(conn_, "SELECT 42, 1.5, 'hi', x'00', NULL");
+    ASSERT_TRUE(stmt.ok());
+    Statement& s = stmt.value();
+
+    auto step = s.Step();
+    ASSERT_TRUE(step.ok());
+    ASSERT_EQ(step.value(), StepResult::kRow);
+    EXPECT_EQ(s.ColumnType(0), ValueType::kInteger);
+    EXPECT_EQ(s.ColumnType(1), ValueType::kFloat);
+    EXPECT_EQ(s.ColumnType(2), ValueType::kText);
+    EXPECT_EQ(s.ColumnType(3), ValueType::kBlob);
+    EXPECT_EQ(s.ColumnType(4), ValueType::kNull);
+}
+
 TEST_F(StatementTest, ColumnIsNullDetectsNull) {
     ASSERT_TRUE(conn_.Execute("INSERT INTO t (name) VALUES (NULL)").ok());
     auto stmt = Statement::Prepare(
