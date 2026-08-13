@@ -6,10 +6,8 @@
 #include <string>
 
 #include "arg_parser.h"
-#include "cli_version.h"
 #include "line_reader.h"
 #include "repl.h"
-#include "result_view.h"
 #include "sql_executor.h"
 #include "sqlite_manager/connection.h"
 #include "sqlite_manager/version.h"
@@ -61,9 +59,11 @@ int CliApplication::Run(int argc, char** argv) {
         return 0;
     }
     if (version) {
-        out_ << "sqlite-manager " << kVersionString
-             << " (libsqlite_manager " << sqlite_manager::kVersionString
-             << ", SQLite " << sqlite_manager::SqliteVersion() << ")\n";
+        out_ << "sqlite-manager "
+             << sqlite_manager::kVersionMajor << '.'
+             << sqlite_manager::kVersionMinor << '.'
+             << sqlite_manager::kVersionPatch
+             << " (SQLite " << sqlite_manager::SqliteVersion() << ")\n";
         return 0;
     }
 
@@ -85,21 +85,19 @@ int CliApplication::Run(int argc, char** argv) {
         return 1;
     }
 
-    const TableView view;
-
     if (positional.size() == 2) {
-        return ExecuteSql(conn, positional[1], view, out_, err_);
+        return ExecuteSql(conn, positional[1], out_, err_);
     }
 
     // Real terminal session: use line editing with history. isocline
     // detects non-TTY stdin itself and degrades to plain reads.
     if (&in_ == &std::cin && !batch) {
         IsoclineLineReader reader;
-        Repl repl(conn, reader, view, out_, err_);
+        Repl repl(conn, reader, out_, err_);
         return repl.Run();
     }
     StreamLineReader reader(in_, out_, !batch);
-    Repl repl(conn, reader, view, out_, err_);
+    Repl repl(conn, reader, out_, err_);
     return repl.Run();
 }
 

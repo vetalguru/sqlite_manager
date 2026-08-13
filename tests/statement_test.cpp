@@ -99,19 +99,14 @@ TEST_F(StatementTest, ReadsAllRowsAndColumns) {
     EXPECT_EQ(step.value(), StepResult::kDone);
 }
 
-TEST_F(StatementTest, ColumnNameReturnsSourceOrAlias) {
+TEST_F(StatementTest, ColumnNamesComeFromSql) {
     auto stmt = Statement::Prepare(
-        conn_, "SELECT id, score AS points FROM t");
+        conn_, "SELECT id, name AS title, score * 2 AS doubled FROM t");
     ASSERT_TRUE(stmt.ok());
     Statement& s = stmt.value();
-
-    EXPECT_EQ(s.ColumnName(0), "id");       // source column name
-    EXPECT_EQ(s.ColumnName(1), "points");   // AS alias
-}
-
-TEST_F(StatementTest, ColumnNameOnEmptyStatementIsEmpty) {
-    Statement s;
-    EXPECT_TRUE(s.ColumnName(0).empty());
+    EXPECT_EQ(s.ColumnName(0), "id");
+    EXPECT_EQ(s.ColumnName(1), "title");
+    EXPECT_EQ(s.ColumnName(2), "doubled");
 }
 
 TEST_F(StatementTest, ColumnIsNullDetectsNull) {
@@ -223,6 +218,7 @@ TEST_F(StatementTest, DefaultConstructedIsInvalid) {
     EXPECT_EQ(s.BindInt64(1, 1).error().code, ErrorCode::kMisuse);
     EXPECT_FALSE(s.Step().ok());
     EXPECT_EQ(s.ColumnCount(), 0);
+    EXPECT_EQ(s.ColumnName(0), "");
     EXPECT_TRUE(s.ColumnIsNull(0));
 }
 

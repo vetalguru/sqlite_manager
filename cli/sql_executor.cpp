@@ -1,15 +1,10 @@
 #include "sql_executor.h"
 
-#include <cstddef>
-#include <optional>
+#include <algorithm>
 #include <ostream>
-#include <utility>
 #include <vector>
 
-#include "query_result.h"
-#include "result_view.h"
 #include "sqlite_manager/connection.h"
-#include "sqlite_manager/result.h"
 #include "sqlite_manager/statement.h"
 
 namespace sqlite_manager_cli {
@@ -17,58 +12,88 @@ namespace sqlite_manager_cli {
 namespace {
 
 using sqlite_manager::Connection;
-using sqlite_manager::Result;
 using sqlite_manager::Statement;
 
-// Steps a query statement to completion, collecting its columns and
-// rows into the model. NULL cells are stored as std::nullopt.
-Result<QueryResult> BuildQueryResult(Statement& stmt) {
+// Writes one horizontal frame line: +----+---------+
+void PrintFrame(const std::vector<std::size_t>& width, std::ostream& out) {
+    for (const std::size_t w : width) {
+        out << '+' << std::string(w + 2, '-');
+    }
+    out << "+\n";
+}
+
+// Writes one table row: | 1  | M855    |
+void PrintRow(const std::vector<std::string>& row,
+              const std::vector<std::size_t>& width, std::ostream& out) {
+    for (std::size_t i = 0; i < row.size(); ++i) {
+        out << "| " << row[i]
+            << std::string(width[i] - row[i].size(), ' ') << ' ';
+    }
+    out << "|\n";
+}
+
+// Prints all rows of a prepared statement as a framed table with a
+// header. Returns exit code.
+int RunSelect(Statement& stmt, std::ostream& out, std::ostream& err) {
     const int columns = stmt.ColumnCount();
 
-    QueryResult result;
-    result.columns.reserve(static_cast<std::size_t>(columns));
+    std::vector<std::string> header;
+    header.reserve(static_cast<std::size_t>(columns));
     for (int i = 0; i < columns; ++i) {
-        result.columns.push_back(stmt.ColumnName(i));
+        header.push_back(stmt.ColumnName(i));
     }
 
+    std::vector<std::vector<std::string>> rows;
     while (true) {
         auto step = stmt.Step();
-        if (!step.ok()) return step.error();
+        if (!step.ok()) {
+            err << "Error: " << step.error().message << "\n";
+            return 1;
+        }
         if (step.value() == Statement::StepResult::kDone) break;
 
-        std::vector<QueryResult::Cell> row;
+        std::vector<std::string> row;
         row.reserve(static_cast<std::size_t>(columns));
         for (int i = 0; i < columns; ++i) {
-            if (stmt.ColumnIsNull(i)) {
-                row.emplace_back(std::nullopt);
-            } else {
-                row.emplace_back(stmt.ColumnText(i));
-            }
+            row.push_back(stmt.ColumnIsNull(i) ? "NULL"
+                                               : stmt.ColumnText(i));
         }
-        result.rows.push_back(std::move(row));
+        rows.push_back(std::move(row));
     }
 
-    return result;
+    std::vector<std::size_t> width(static_cast<std::size_t>(columns), 0);
+    for (std::size_t i = 0; i < width.size(); ++i) {
+        width[i] = header[i].size();
+    }
+    for (const auto& row : rows) {
+        for (std::size_t i = 0; i < row.size(); ++i) {
+            width[i] = std::max(width[i], row[i].size());
+        }
+    }
+
+    PrintFrame(width, out);
+    PrintRow(header, width, out);
+    PrintFrame(width, out);
+    for (const auto& row : rows) {
+        PrintRow(row, width, out);
+    }
+    PrintFrame(width, out);
+    return 0;
 }
 
 }  // namespace
 
 int ExecuteSql(Connection& conn, const std::string& sql,
-               const ResultView& view, std::ostream& out, std::ostream& err) {
+               std::ostream& out, std::ostream& err) {
     // Single statements go through Statement so result rows can be
-    // rendered; batches fail Prepare and fall back to Execute.
+    // printed; batches fail Prepare and fall back to Execute.
     auto stmt = Statement::Prepare(conn, sql);
     if (stmt.ok()) {
         if (stmt.value().ColumnCount() > 0) {
-            auto result = BuildQueryResult(stmt.value());
-            if (!result.ok()) {
-                err << "Error: " << result.error().message << "\n";
-                return 1;
-            }
-            view.Render(result.value(), out);
-            return 0;
+            return RunSelect(stmt.value(), out, err);
         }
-        if (auto step = stmt.value().Step(); !step.ok()) {
+        auto step = stmt.value().Step();
+        if (!step.ok()) {
             err << "Error: " << step.error().message << "\n";
             return 1;
         }
