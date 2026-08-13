@@ -1,6 +1,7 @@
 #ifndef SQLITE_MANAGER_CONNECTION_H
 #define SQLITE_MANAGER_CONNECTION_H
 
+#include <cstdint>
 #include <string>
 
 #include "sqlite_manager/result.h"
@@ -40,6 +41,10 @@ public:
 
     // Executes one or more SQL statements that produce no result rows
     Status Execute(const std::string& sql);
+
+    // Rowid of the most recent successful INSERT on this connection, or
+    // 0 if no row has been inserted (or the connection is closed).
+    std::int64_t LastInsertRowId() const;
 
     // Escape hatch for layers that need the raw handle (Statement will)
     sqlite3* raw() const { return db_; }

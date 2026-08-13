@@ -97,4 +97,9 @@ Status Connection::Execute(const std::string& sql) {
     return Ok();
 }
 
+std::int64_t Connection::LastInsertRowId() const {
+    if (db_ == nullptr) return 0;
+    return sqlite3_last_insert_rowid(db_);
+}
+
 }  // namespace sqlite_manager
