@@ -107,4 +107,16 @@ std::int64_t Connection::Changes() const {
     return sqlite3_changes64(db_);
 }
 
+Status Connection::BusyTimeout(int milliseconds) {
+    if (db_ == nullptr) {
+        return Error(ErrorCode::kMisuse, SQLITE_MISUSE,
+                     "connection is not open");
+    }
+    const int rc = sqlite3_busy_timeout(db_, milliseconds);
+    if (rc != SQLITE_OK) {
+        return MakeError(db_);
+    }
+    return Ok();
+}
+
 }  // namespace sqlite_manager

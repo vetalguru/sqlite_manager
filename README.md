@@ -172,6 +172,8 @@ Link against the `sqlite_manager` target and use the RAII wrappers directly:
 sqlite_manager::Connection db;
 if (!db.Open("app.db").ok()) { /* inspect the returned Status::error() */ }
 
+db.BusyTimeout(1000);   // wait up to 1s if the database is locked
+
 db.Execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
 db.Execute("INSERT INTO users (name) VALUES ('ada')");
 
