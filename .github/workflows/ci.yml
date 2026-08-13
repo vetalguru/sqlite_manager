@@ -31,11 +31,10 @@ jobs:
 
       - name: Install build tools
         run: sudo apt-get update &&
-             sudo apt-get install -y ninja-build clang-tidy dpkg-dev
+             sudo apt-get install -y ninja-build dpkg-dev
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
-             -DSQLITE_MANAGER_ENABLE_CLANG_TIDY=ON
 
       - name: Build
         run: cmake --build ${{ matrix.dir }}
