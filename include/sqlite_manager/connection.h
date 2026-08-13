@@ -46,6 +46,10 @@ public:
     // 0 if no row has been inserted (or the connection is closed).
     std::int64_t LastInsertRowId() const;
 
+    // Number of rows changed by the most recent INSERT, UPDATE or DELETE
+    // on this connection, or 0 if none (or the connection is closed).
+    std::int64_t Changes() const;
+
     // Escape hatch for layers that need the raw handle (Statement will)
     sqlite3* raw() const { return db_; }
 

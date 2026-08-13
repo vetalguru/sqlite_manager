@@ -102,4 +102,9 @@ std::int64_t Connection::LastInsertRowId() const {
     return sqlite3_last_insert_rowid(db_);
 }
 
+std::int64_t Connection::Changes() const {
+    if (db_ == nullptr) return 0;
+    return sqlite3_changes64(db_);
+}
+
 }  // namespace sqlite_manager

@@ -177,6 +177,9 @@ db.Execute("INSERT INTO users (name) VALUES ('ada')");
 
 // Rowid of the row just inserted.
 const std::int64_t id = db.LastInsertRowId();
+
+db.Execute("UPDATE users SET name = 'Ada' WHERE id = 1");
+const std::int64_t updated = db.Changes();   // rows affected: 1
 ```
 
 ## Tests
