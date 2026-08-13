@@ -1,9 +1,13 @@
 #include "sql_executor.h"
 
-#include <algorithm>
+#include <cstddef>
+#include <optional>
 #include <ostream>
+#include <utility>
 #include <vector>
 
+#include "query_result.h"
+#include "result_view.h"
 #include "sqlite_manager/connection.h"
 #include "sqlite_manager/statement.h"
 
@@ -14,36 +18,19 @@ namespace {
 using sqlite_manager::Connection;
 using sqlite_manager::Statement;
 
-// Writes one horizontal frame line: +----+---------+
-void PrintFrame(const std::vector<std::size_t>& width, std::ostream& out) {
-    for (const std::size_t w : width) {
-        out << '+' << std::string(w + 2, '-');
-    }
-    out << "+\n";
-}
-
-// Writes one table row: | 1  | M855    |
-void PrintRow(const std::vector<std::string>& row,
-              const std::vector<std::size_t>& width, std::ostream& out) {
-    for (std::size_t i = 0; i < row.size(); ++i) {
-        out << "| " << row[i]
-            << std::string(width[i] - row[i].size(), ' ') << ' ';
-    }
-    out << "|\n";
-}
-
-// Prints all rows of a prepared statement as a framed table with a
-// header. Returns exit code.
-int RunSelect(Statement& stmt, std::ostream& out, std::ostream& err) {
+// Steps a query to completion, collecting its columns and rows into the
+// model, then renders it through `view`. NULL cells become std::nullopt
+// so the view controls how they appear. Returns exit code.
+int RunQuery(Statement& stmt, const ResultView& view,
+             std::ostream& out, std::ostream& err) {
     const int columns = stmt.ColumnCount();
 
-    std::vector<std::string> header;
-    header.reserve(static_cast<std::size_t>(columns));
+    QueryResult result;
+    result.columns.reserve(static_cast<std::size_t>(columns));
     for (int i = 0; i < columns; ++i) {
-        header.push_back(stmt.ColumnName(i));
+        result.columns.push_back(stmt.ColumnName(i));
     }
 
-    std::vector<std::vector<std::string>> rows;
     while (true) {
         auto step = stmt.Step();
         if (!step.ok()) {
@@ -52,48 +39,34 @@ int RunSelect(Statement& stmt, std::ostream& out, std::ostream& err) {
         }
         if (step.value() == Statement::StepResult::kDone) break;
 
-        std::vector<std::string> row;
+        std::vector<QueryResult::Cell> row;
         row.reserve(static_cast<std::size_t>(columns));
         for (int i = 0; i < columns; ++i) {
-            row.push_back(stmt.ColumnIsNull(i) ? "NULL"
-                                               : stmt.ColumnText(i));
+            if (stmt.ColumnIsNull(i)) {
+                row.emplace_back(std::nullopt);
+            } else {
+                row.emplace_back(stmt.ColumnText(i));
+            }
         }
-        rows.push_back(std::move(row));
+        result.rows.push_back(std::move(row));
     }
 
-    std::vector<std::size_t> width(static_cast<std::size_t>(columns), 0);
-    for (std::size_t i = 0; i < width.size(); ++i) {
-        width[i] = header[i].size();
-    }
-    for (const auto& row : rows) {
-        for (std::size_t i = 0; i < row.size(); ++i) {
-            width[i] = std::max(width[i], row[i].size());
-        }
-    }
-
-    PrintFrame(width, out);
-    PrintRow(header, width, out);
-    PrintFrame(width, out);
-    for (const auto& row : rows) {
-        PrintRow(row, width, out);
-    }
-    PrintFrame(width, out);
+    view.Render(result, out);
     return 0;
 }
 
 }  // namespace
 
 int ExecuteSql(Connection& conn, const std::string& sql,
-               std::ostream& out, std::ostream& err) {
+               const ResultView& view, std::ostream& out, std::ostream& err) {
     // Single statements go through Statement so result rows can be
-    // printed; batches fail Prepare and fall back to Execute.
+    // rendered; batches fail Prepare and fall back to Execute.
     auto stmt = Statement::Prepare(conn, sql);
     if (stmt.ok()) {
         if (stmt.value().ColumnCount() > 0) {
-            return RunSelect(stmt.value(), out, err);
+            return RunQuery(stmt.value(), view, out, err);
         }
-        auto step = stmt.value().Step();
-        if (!step.ok()) {
+        if (auto step = stmt.value().Step(); !step.ok()) {
             err << "Error: " << step.error().message << "\n";
             return 1;
         }

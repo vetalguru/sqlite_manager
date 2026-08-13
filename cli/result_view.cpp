@@ -13,8 +13,23 @@ namespace sqlite_manager_cli {
 namespace {
 
 // How a SQL NULL cell is shown in a table.
-std::string CellText(const QueryResult::Cell& cell) {
-    return cell ? *cell : std::string("NULL");
+std::string TableCell(const QueryResult::Cell& cell) {
+    return cell.value_or("NULL");
+}
+
+// RFC 4180 field: quote it when it contains a comma, double quote, CR or
+// LF; escape embedded quotes by doubling them.
+std::string CsvField(const std::string& value) {
+    if (value.find_first_of(",\"\r\n") == std::string::npos) {
+        return value;
+    }
+    std::string out = "\"";
+    for (const char c : value) {
+        if (c == '"') out += '"';
+        out += c;
+    }
+    out += '"';
+    return out;
 }
 
 }  // namespace
@@ -29,35 +44,57 @@ void TableView::Render(const QueryResult& result, std::ostream& out) const {
     }
     for (const auto& row : result.rows) {
         for (std::size_t i = 0; i < row.size(); ++i) {
-            width[i] = std::max(width[i], CellText(row[i]).size());
+            width[i] = std::max(width[i], TableCell(row[i]).size());
         }
     }
 
-    // "| a | bb |" with every cell padded to its column width.
-    auto print_cells = [&](const std::vector<std::string>& cells) {
-        out << '|';
-        for (std::size_t i = 0; i < columns; ++i) {
-            out << ' ' << cells[i]
-                << std::string(width[i] - cells[i].size(), ' ') << " |";
+    // "+----+---------+"
+    auto frame = [&]() {
+        for (const std::size_t w : width) {
+            out << '+' << std::string(w + 2, '-');
         }
-        out << "\n";
+        out << "+\n";
     };
 
-    print_cells(result.columns);
+    // "| 1  | M855    |"
+    auto print_cells = [&](const std::vector<std::string>& cells) {
+        for (std::size_t i = 0; i < columns; ++i) {
+            out << "| " << cells[i]
+                << std::string(width[i] - cells[i].size(), ' ') << ' ';
+        }
+        out << "|\n";
+    };
 
-    // "|----|------|" rule between the header and the rows.
-    out << '|';
-    for (const std::size_t w : width) {
-        out << std::string(w + 2, '-') << '|';
-    }
-    out << "\n";
+    frame();
+    print_cells(result.columns);
+    frame();
 
     std::vector<std::string> cells(columns);
     for (const auto& row : result.rows) {
         for (std::size_t i = 0; i < columns; ++i) {
-            cells[i] = CellText(row[i]);
+            cells[i] = TableCell(row[i]);
         }
         print_cells(cells);
+    }
+    frame();
+}
+
+void CsvView::Render(const QueryResult& result, std::ostream& out) const {
+    const std::size_t columns = result.columns.size();
+
+    for (std::size_t i = 0; i < columns; ++i) {
+        if (i > 0) out << ',';
+        out << CsvField(result.columns[i]);
+    }
+    out << '\n';
+
+    for (const auto& row : result.rows) {
+        for (std::size_t i = 0; i < columns; ++i) {
+            if (i > 0) out << ',';
+            // SQL NULL becomes an empty field.
+            out << CsvField(row[i].value_or(std::string()));
+        }
+        out << '\n';
     }
 }
 

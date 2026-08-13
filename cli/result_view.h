@@ -16,12 +16,23 @@ public:
     virtual void Render(const QueryResult& result, std::ostream& out) const = 0;
 };
 
-// Aligned box table with a header row and a separator rule:
+// Framed ASCII table with a header row:
+//   +----+---------+
 //   | id | name    |
-//   |----|---------|
+//   +----+---------+
 //   | 1  | M855    |
-// An empty result set prints the header and rule with no data rows.
+//   +----+---------+
+// SQL NULL renders as the text "NULL".
 class TableView final : public ResultView {
+public:
+    void Render(const QueryResult& result, std::ostream& out) const override;
+};
+
+// Comma-separated values (RFC 4180): a header row, then one row per
+// record. A field is quoted when it contains a comma, double quote, CR
+// or LF, and embedded quotes are doubled. SQL NULL renders as an empty
+// field.
+class CsvView final : public ResultView {
 public:
     void Render(const QueryResult& result, std::ostream& out) const override;
 };

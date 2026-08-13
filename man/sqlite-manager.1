@@ -36,6 +36,13 @@ Open the database in read-only mode; writes fail. The file must exist.
 .TP
 .B \-\-batch
 Suppress interactive prompts. Useful when reading SQL from a pipe or file.
+.TP
+.BI \-\-format " FORMAT"
+Output format for query results:
+.B table
+(default, a framed ASCII table) or
+.B csv
+(RFC 4180 comma-separated values).
 .SH "INTERACTIVE SHELL"
 Statements are accumulated until a terminating semicolon, then executed.
 The following dot commands are recognized at the start of a statement:
