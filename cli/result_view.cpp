@@ -1,7 +1,9 @@
 #include "result_view.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdio>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -27,6 +29,33 @@ std::string CsvField(const std::string& value) {
     for (const char c : value) {
         if (c == '"') out += '"';
         out += c;
+    }
+    out += '"';
+    return out;
+}
+
+// A quoted, escaped JSON string per RFC 8259.
+std::string JsonString(const std::string& value) {
+    std::string out = "\"";
+    for (const char ch : value) {
+        const auto c = static_cast<unsigned char>(ch);
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            default:
+                if (c < 0x20) {
+                    std::array<char, 7> buf{};
+                    std::snprintf(buf.data(), buf.size(), "\\u%04x", c);
+                    out += buf.data();
+                } else {
+                    out += ch;
+                }
+        }
     }
     out += '"';
     return out;
@@ -96,6 +125,28 @@ void CsvView::Render(const QueryResult& result, std::ostream& out) const {
         }
         out << '\n';
     }
+}
+
+void JsonView::Render(const QueryResult& result, std::ostream& out) const {
+    const std::size_t columns = result.columns.size();
+
+    out << '[';
+    for (std::size_t r = 0; r < result.rows.size(); ++r) {
+        out << (r == 0 ? "\n" : ",\n") << "  {";
+        const auto& row = result.rows[r];
+        for (std::size_t i = 0; i < columns; ++i) {
+            if (i > 0) out << ", ";
+            out << JsonString(result.columns[i]) << ": ";
+            const QueryResult::Cell& cell = row[i];
+            if (cell.has_value()) {
+                out << JsonString(*cell);
+            } else {
+                out << "null";
+            }
+        }
+        out << '}';
+    }
+    out << (result.rows.empty() ? "]\n" : "\n]\n");
 }
 
 }  // namespace sqlite_manager_cli

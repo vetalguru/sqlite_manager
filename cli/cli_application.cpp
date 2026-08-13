@@ -50,7 +50,7 @@ int CliApplication::Run(int argc, char** argv) {
     parser.Add({"--batch"}, &batch,
                "suppress interactive prompts");
     parser.Add({"--format"}, &format,
-               "output format: table (default) or csv");
+               "output format: table (default), csv, or json");
 
     if (!parser.Parse(argc, argv)) {
         err_ << parser.error() << "\n";
@@ -80,13 +80,17 @@ int CliApplication::Run(int argc, char** argv) {
 
     TableView table_view;
     CsvView csv_view;
+    JsonView json_view;
     const ResultView* view = nullptr;
     if (format == "table") {
         view = &table_view;
     } else if (format == "csv") {
         view = &csv_view;
+    } else if (format == "json") {
+        view = &json_view;
     } else {
-        err_ << "Unknown format: " << format << " (expected table or csv)\n";
+        err_ << "Unknown format: " << format
+             << " (expected table, csv, or json)\n";
         return 1;
     }
 

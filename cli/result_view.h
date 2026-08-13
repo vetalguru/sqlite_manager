@@ -37,6 +37,14 @@ public:
     void Render(const QueryResult& result, std::ostream& out) const override;
 };
 
+// JSON: an array of one object per row, keyed by column name. Values are
+// emitted as JSON strings (the model carries display text, not types);
+// SQL NULL renders as JSON null. Strings are escaped per RFC 8259.
+class JsonView final : public ResultView {
+public:
+    void Render(const QueryResult& result, std::ostream& out) const override;
+};
+
 }  // namespace sqlite_manager_cli
 
 #endif  // SQLITE_MANAGER_CLI_RESULT_VIEW_H
