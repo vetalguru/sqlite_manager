@@ -137,6 +137,29 @@ TEST(ConnectionTest, LastInsertRowIdOnClosedConnectionIsZero) {
     EXPECT_EQ(conn.LastInsertRowId(), 0);
 }
 
+// ---------- Changes ----------
+
+TEST(ConnectionTest, ChangesCountsAffectedRows) {
+    Connection conn;
+    ASSERT_TRUE(conn.Open(":memory:").ok());
+    ASSERT_TRUE(conn.Execute("CREATE TABLE t (x INTEGER)").ok());
+
+    ASSERT_TRUE(conn.Execute("INSERT INTO t VALUES (1), (2), (3)").ok());
+    EXPECT_EQ(conn.Changes(), 3);
+
+    ASSERT_TRUE(conn.Execute("UPDATE t SET x = x + 1").ok());
+    EXPECT_EQ(conn.Changes(), 3);
+
+    // Rows are now 2, 3, 4; only 4 > 3.
+    ASSERT_TRUE(conn.Execute("DELETE FROM t WHERE x > 3").ok());
+    EXPECT_EQ(conn.Changes(), 1);
+}
+
+TEST(ConnectionTest, ChangesOnClosedConnectionIsZero) {
+    const Connection conn;
+    EXPECT_EQ(conn.Changes(), 0);
+}
+
 // ---------- Move semantics ----------
 
 TEST(ConnectionTest, MoveConstructorTransfersOwnership) {
