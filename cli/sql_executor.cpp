@@ -1,7 +1,6 @@
 #include "sql_executor.h"
 
 #include <cstddef>
-#include <optional>
 #include <ostream>
 #include <utility>
 #include <vector>
@@ -17,10 +16,12 @@ namespace {
 
 using sqlite_manager::Connection;
 using sqlite_manager::Statement;
+using sqlite_manager::ValueType;
 
 // Steps a query to completion, collecting its columns and rows into the
-// model, then renders it through `view`. NULL cells become std::nullopt
-// so the view controls how they appear. Returns exit code.
+// model, then renders it through `view`. Each cell records its storage
+// type and (for non-NULL values) its display text, so the view can
+// render faithfully. Returns exit code.
 int RunQuery(Statement& stmt, const ResultView& view,
              std::ostream& out, std::ostream& err) {
     const int columns = stmt.ColumnCount();
@@ -39,14 +40,15 @@ int RunQuery(Statement& stmt, const ResultView& view,
         }
         if (step.value() == Statement::StepResult::kDone) break;
 
-        std::vector<QueryResult::Cell> row;
+        std::vector<Cell> row;
         row.reserve(static_cast<std::size_t>(columns));
         for (int i = 0; i < columns; ++i) {
-            if (stmt.ColumnIsNull(i)) {
-                row.emplace_back(std::nullopt);
-            } else {
-                row.emplace_back(stmt.ColumnText(i));
+            Cell cell;
+            cell.type = stmt.ColumnType(i);
+            if (cell.type != ValueType::kNull) {
+                cell.text = stmt.ColumnText(i);
             }
+            row.push_back(std::move(cell));
         }
         result.rows.push_back(std::move(row));
     }

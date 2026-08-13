@@ -13,6 +13,9 @@ namespace sqlite_manager {
 
 class Connection;
 
+// The SQLite storage class of a result value (see sqlite3_column_type).
+enum class ValueType { kInteger, kFloat, kText, kBlob, kNull };
+
 // RAII wrapper over a prepared SQL statement.
 //
 // Typical usage:
@@ -66,6 +69,8 @@ public:
     int ColumnCount() const;
     // Name of a result column (its AS alias, or the source expression).
     std::string ColumnName(int index) const;
+    // Storage class of the current row's value in this column.
+    ValueType ColumnType(int index) const;
     std::int64_t ColumnInt64(int index) const;
     double ColumnDouble(int index) const;
     std::string ColumnText(int index) const;

@@ -160,6 +160,17 @@ std::string Statement::ColumnName(int index) const {
     return name;
 }
 
+ValueType Statement::ColumnType(int index) const {
+    if (stmt_ == nullptr) return ValueType::kNull;
+    switch (sqlite3_column_type(stmt_, index)) {
+        case SQLITE_INTEGER: return ValueType::kInteger;
+        case SQLITE_FLOAT:   return ValueType::kFloat;
+        case SQLITE_TEXT:    return ValueType::kText;
+        case SQLITE_BLOB:    return ValueType::kBlob;
+        default:             return ValueType::kNull;   // SQLITE_NULL
+    }
+}
+
 std::int64_t Statement::ColumnInt64(int index) const {
     if (stmt_ == nullptr) return 0;
     return sqlite3_column_int64(stmt_, index);
