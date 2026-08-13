@@ -112,6 +112,31 @@ TEST(ConnectionTest, ExecuteConstraintViolationMapsToConstraint) {
     EXPECT_EQ(s.error().code, ErrorCode::kConstraint);
 }
 
+// ---------- LastInsertRowId ----------
+
+TEST(ConnectionTest, LastInsertRowIdTracksInserts) {
+    Connection conn;
+    ASSERT_TRUE(conn.Open(":memory:").ok());
+    ASSERT_TRUE(conn.Execute(
+        "CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)").ok());
+
+    ASSERT_TRUE(conn.Execute("INSERT INTO t (v) VALUES ('a')").ok());
+    EXPECT_EQ(conn.LastInsertRowId(), 1);
+    ASSERT_TRUE(conn.Execute("INSERT INTO t (v) VALUES ('b')").ok());
+    EXPECT_EQ(conn.LastInsertRowId(), 2);
+}
+
+TEST(ConnectionTest, LastInsertRowIdIsZeroBeforeAnyInsert) {
+    Connection conn;
+    ASSERT_TRUE(conn.Open(":memory:").ok());
+    EXPECT_EQ(conn.LastInsertRowId(), 0);
+}
+
+TEST(ConnectionTest, LastInsertRowIdOnClosedConnectionIsZero) {
+    const Connection conn;
+    EXPECT_EQ(conn.LastInsertRowId(), 0);
+}
+
 // ---------- Move semantics ----------
 
 TEST(ConnectionTest, MoveConstructorTransfersOwnership) {

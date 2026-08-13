@@ -162,6 +162,23 @@ sqlite-manager :memory: "SELECT 6 * 7 AS answer"
 sqlite-manager --readonly app.db "SELECT * FROM ammo"
 ```
 
+## Library
+
+Link against the `sqlite_manager` target and use the RAII wrappers directly:
+
+```cpp
+#include "sqlite_manager/connection.h"
+
+sqlite_manager::Connection db;
+if (!db.Open("app.db").ok()) { /* inspect the returned Status::error() */ }
+
+db.Execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+db.Execute("INSERT INTO users (name) VALUES ('ada')");
+
+// Rowid of the row just inserted.
+const std::int64_t id = db.LastInsertRowId();
+```
+
 ## Tests
 
 ```bash
