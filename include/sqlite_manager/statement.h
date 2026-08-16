@@ -90,10 +90,6 @@ public:
 private:
     explicit Statement(sqlite3_stmt* stmt) : stmt_(stmt) {}
 
-    // Resolves a bind-parameter name to its 1-based index (kRange if the
-    // name is absent, kMisuse if the statement is not prepared).
-    Result<int> ParameterIndex(const std::string& name) const;
-
     sqlite3_stmt* stmt_ = nullptr;
 };
 
