@@ -1,5 +1,6 @@
 build/
 .cache/
+.claude/
 compile_commands.json
 *.sqlite
 *.db
