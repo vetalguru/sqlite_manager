@@ -24,7 +24,14 @@ std::optional<std::string> StreamLineReader::ReadLine(
 }
 
 IsoclineLineReader::IsoclineLineReader() {
-    ic_set_history(nullptr, 1000);  // in-memory history, 1000 entries
+    // Persist history across sessions under the user's home directory.
+    const char* home = std::getenv("HOME");
+    if (home == nullptr) home = std::getenv("USERPROFILE");  // Windows
+    if (home != nullptr) {
+        history_path_ = std::string(home) + "/.sqlite_manager_history";
+    }
+    ic_set_history(history_path_.empty() ? nullptr : history_path_.c_str(),
+                   1000);           // up to 1000 entries
     ic_enable_multiline(false);     // our Repl handles multi-line SQL
     ic_set_prompt_marker("", "");   // no extra marker, prompt as given
 }

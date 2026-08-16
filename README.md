@@ -49,7 +49,8 @@ The binary is `build/<config>/cli/sqlite-manager`.
 ```
 
 In the shell, statements end with `;`. Dot commands: `.help`, `.tables`,
-`.schema [TABLE]`, `.read FILE`, `.quit` / `.exit` (or Ctrl-D).
+`.schema [TABLE]`, `.read FILE`, `.quit` / `.exit` (or Ctrl-D). Command
+history is saved to `~/.sqlite_manager_history` and restored next run.
 
 ```
 sql> SELECT 1 AS id, 'M855' AS name;
