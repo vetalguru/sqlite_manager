@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -316,6 +317,58 @@ TEST(CliApplicationReplTest, UnknownDotCommandReportsError) {
     const RunResult r = RunApp({"--batch", ":memory:"}, ".nope\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_NE(r.err.find("Unknown command: .nope"), std::string::npos);
+}
+
+TEST(CliApplicationReplTest, SchemaShowsCreateStatements) {
+    const RunResult r = RunApp(
+        {"--batch", ":memory:"},
+        "CREATE TABLE t (id INTEGER, name TEXT);\n.schema\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.out.find("CREATE TABLE t (id INTEGER, name TEXT);"),
+              std::string::npos);
+}
+
+TEST(CliApplicationReplTest, SchemaWithNameFiltersToOneTable) {
+    const RunResult r =
+        RunApp({"--batch", ":memory:"},
+               "CREATE TABLE a (x);\nCREATE TABLE b (y);\n.schema b\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.out.find("CREATE TABLE b (y);"), std::string::npos);
+    EXPECT_EQ(r.out.find("CREATE TABLE a"), std::string::npos);
+}
+
+TEST(CliApplicationReplTest, SchemaUnknownTableReports) {
+    const RunResult r =
+        RunApp({"--batch", ":memory:"}, ".schema nope\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.err.find("No such table: nope"), std::string::npos);
+}
+
+TEST(CliApplicationReplTest, ReadExecutesStatementsFromFile) {
+    const std::string path = ::testing::TempDir() + "repl_read_test.sql";
+    {
+        std::ofstream f(path);
+        f << "CREATE TABLE t (x);\nINSERT INTO t VALUES (7);\n"
+             "SELECT x FROM t;\n";
+    }
+    const RunResult r =
+        RunApp({"--batch", ":memory:"}, ".read " + path + "\n.quit\n");
+    std::remove(path.c_str());
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.out.find("| 7 |"), std::string::npos);  // SELECT result shown
+}
+
+TEST(CliApplicationReplTest, ReadWithoutArgumentReports) {
+    const RunResult r = RunApp({"--batch", ":memory:"}, ".read\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.err.find(".read requires a file"), std::string::npos);
+}
+
+TEST(CliApplicationReplTest, ReadNonexistentFileReports) {
+    const RunResult r = RunApp({"--batch", ":memory:"},
+                               ".read /no/such/file_98765.sql\n.quit\n");
+    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_NE(r.err.find("Cannot open"), std::string::npos);
 }
 
 TEST(CliApplicationReplTest, PromptsAreShownWithoutBatch) {

@@ -18,8 +18,9 @@ class ResultView;
 // Reads lines through a LineReader, accumulating them until the input
 // forms a complete SQL statement (ends with ';'), then executes it.
 // SQL errors are reported to `err` and do not terminate the loop.
-// Dot commands (.help, .tables, .quit/.exit) are recognized only at
-// the start of a statement. EOF executes any pending input and exits.
+// Dot commands (.help, .tables, .schema, .read, .quit/.exit) are
+// recognized only at the start of a statement. EOF executes any pending
+// input and exits.
 class Repl final {
 public:
     // The connection, reader, view, and streams must outlive the object.
@@ -34,6 +35,12 @@ private:
     // Returns true if the REPL should exit.
     bool HandleDotCommand(const std::string& command);
     void PrintHelp();
+    // Prints the CREATE statements for all objects, or just `table`.
+    void PrintSchema(const std::string& table);
+    // Reads `path` and executes the SQL statements it contains.
+    void ReadFile(const std::string& path);
+    // Executes a string of SQL, statement by statement.
+    void ExecuteScript(const std::string& script);
 
     sqlite_manager::Connection& conn_;
     LineReader& reader_;
