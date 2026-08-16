@@ -13,8 +13,7 @@ namespace {
 
 Error MakeError(sqlite3_stmt* stmt) {
     sqlite3* db = sqlite3_db_handle(stmt);
-    return Error::FromSqlite(sqlite3_extended_errcode(db),
-                             sqlite3_errmsg(db));
+    return Error::FromSqlite(sqlite3_extended_errcode(db), sqlite3_errmsg(db));
 }
 
 Error NotPrepared() {
@@ -29,8 +28,7 @@ Error UnknownParameter(const std::string& name) {
 
 }  // namespace
 
-Result<Statement> Statement::Prepare(Connection& conn,
-                                     const std::string& sql) {
+Result<Statement> Statement::Prepare(Connection& conn, const std::string& sql) {
     if (!conn.IsOpen()) {
         return Error(ErrorCode::kMisuse, SQLITE_MISUSE,
                      "connection is not open");
@@ -38,9 +36,9 @@ Result<Statement> Statement::Prepare(Connection& conn,
 
     sqlite3_stmt* stmt = nullptr;
     const char* tail = nullptr;
-    const int rc = sqlite3_prepare_v2(conn.raw(), sql.c_str(),
-                                      static_cast<int>(sql.size()) + 1,
-                                      &stmt, &tail);
+    const int rc =
+        sqlite3_prepare_v2(conn.raw(), sql.c_str(),
+                           static_cast<int>(sql.size()) + 1, &stmt, &tail);
 
     if (rc != SQLITE_OK) {
         // stmt is guaranteed NULL on failure; error state is on the db.
@@ -109,17 +107,17 @@ Status Statement::BindText(int index, const std::string& value) {
     if (stmt_ == nullptr) return NotPrepared();
     // SQLITE_TRANSIENT: SQLite makes its own copy of the string,
     // so `value` may die before Step(). Safe default over lifetimes.
-    const int rc = sqlite3_bind_text(stmt_, index, value.c_str(),
-                                     static_cast<int>(value.size()),
-                                     SQLITE_TRANSIENT);
+    const int rc =
+        sqlite3_bind_text(stmt_, index, value.c_str(),
+                          static_cast<int>(value.size()), SQLITE_TRANSIENT);
     if (rc != SQLITE_OK) return MakeError(stmt_);
     return Ok();
 }
 
 Status Statement::BindBlob(int index, const void* data, int size) {
     if (stmt_ == nullptr) return NotPrepared();
-    const int rc = sqlite3_bind_blob(stmt_, index, data, size,
-                                     SQLITE_TRANSIENT);
+    const int rc =
+        sqlite3_bind_blob(stmt_, index, data, size, SQLITE_TRANSIENT);
     if (rc != SQLITE_OK) return MakeError(stmt_);
     return Ok();
 }
@@ -199,18 +197,23 @@ int Statement::ColumnCount() const {
 std::string Statement::ColumnName(int index) const {
     if (stmt_ == nullptr) return {};
     const char* name = sqlite3_column_name(stmt_, index);
-    if (name == nullptr) return {};   // out of memory
+    if (name == nullptr) return {};  // out of memory
     return name;
 }
 
 ValueType Statement::ColumnType(int index) const {
     if (stmt_ == nullptr) return ValueType::kNull;
     switch (sqlite3_column_type(stmt_, index)) {
-        case SQLITE_INTEGER: return ValueType::kInteger;
-        case SQLITE_FLOAT:   return ValueType::kFloat;
-        case SQLITE_TEXT:    return ValueType::kText;
-        case SQLITE_BLOB:    return ValueType::kBlob;
-        default:             return ValueType::kNull;   // SQLITE_NULL
+        case SQLITE_INTEGER:
+            return ValueType::kInteger;
+        case SQLITE_FLOAT:
+            return ValueType::kFloat;
+        case SQLITE_TEXT:
+            return ValueType::kText;
+        case SQLITE_BLOB:
+            return ValueType::kBlob;
+        default:
+            return ValueType::kNull;  // SQLITE_NULL
     }
 }
 
@@ -227,7 +230,7 @@ double Statement::ColumnDouble(int index) const {
 std::string Statement::ColumnText(int index) const {
     if (stmt_ == nullptr) return {};
     const unsigned char* text = sqlite3_column_text(stmt_, index);
-    if (text == nullptr) return {};   // NULL column
+    if (text == nullptr) return {};  // NULL column
     const int size = sqlite3_column_bytes(stmt_, index);
     return std::string(reinterpret_cast<const char*>(text),
                        static_cast<std::size_t>(size));
@@ -236,7 +239,7 @@ std::string Statement::ColumnText(int index) const {
 std::vector<std::uint8_t> Statement::ColumnBlob(int index) const {
     if (stmt_ == nullptr) return {};
     const void* data = sqlite3_column_blob(stmt_, index);
-    if (data == nullptr) return {};   // NULL or zero-length blob
+    if (data == nullptr) return {};  // NULL or zero-length blob
     const auto* bytes = static_cast<const std::uint8_t*>(data);
     const int size = sqlite3_column_bytes(stmt_, index);
     return std::vector<std::uint8_t>(bytes, bytes + size);

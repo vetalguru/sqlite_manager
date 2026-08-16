@@ -43,7 +43,7 @@ Status Transaction::Commit() {
     }
     Status s = conn_->Execute("COMMIT");
     if (s.ok()) {
-        conn_ = nullptr;   // deactivate: destructor must not roll back
+        conn_ = nullptr;  // deactivate: destructor must not roll back
     }
     return s;
 }
@@ -54,7 +54,7 @@ Status Transaction::Rollback() {
                      "transaction is not active");
     }
     Status s = conn_->Execute("ROLLBACK");
-    conn_ = nullptr;   // deactivate regardless: nothing left to guard
+    conn_ = nullptr;  // deactivate regardless: nothing left to guard
     return s;
 }
 

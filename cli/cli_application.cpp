@@ -43,12 +43,10 @@ int CliApplication::Run(int argc, char** argv) {
 
     ArgParser parser;
     parser.Add({"--help", "-h"}, &help, "print this help and exit");
-    parser.Add({"--version"}, &version,
-               "print version information and exit");
+    parser.Add({"--version"}, &version, "print version information and exit");
     parser.Add({"--readonly"}, &readonly,
                "open the database in read-only mode");
-    parser.Add({"--batch"}, &batch,
-               "suppress interactive prompts");
+    parser.Add({"--batch"}, &batch, "suppress interactive prompts");
     parser.Add({"--format"}, &format,
                "output format: table (default), csv, or json");
 
@@ -63,11 +61,10 @@ int CliApplication::Run(int argc, char** argv) {
         return 0;
     }
     if (version) {
-        out_ << "sqlite-manager "
-             << sqlite_manager::kVersionMajor << '.'
+        out_ << "sqlite-manager " << sqlite_manager::kVersionMajor << '.'
              << sqlite_manager::kVersionMinor << '.'
-             << sqlite_manager::kVersionPatch
-             << " (SQLite " << sqlite_manager::SqliteVersion() << ")\n";
+             << sqlite_manager::kVersionPatch << " (SQLite "
+             << sqlite_manager::SqliteVersion() << ")\n";
         return 0;
     }
 
@@ -95,13 +92,12 @@ int CliApplication::Run(int argc, char** argv) {
     }
 
     Connection conn;
-    const auto mode = readonly
-        ? Connection::OpenMode::kReadOnly
-        : Connection::OpenMode::kReadWriteCreate;
+    const auto mode = readonly ? Connection::OpenMode::kReadOnly
+                               : Connection::OpenMode::kReadWriteCreate;
 
     if (auto s = conn.Open(positional[0], mode); !s.ok()) {
-        err_ << "Cannot open '" << positional[0]
-             << "': " << s.error().message << "\n";
+        err_ << "Cannot open '" << positional[0] << "': " << s.error().message
+             << "\n";
         return 1;
     }
 

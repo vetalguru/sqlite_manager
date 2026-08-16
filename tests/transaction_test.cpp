@@ -44,7 +44,7 @@ TEST_F(TransactionTest, DestructorRollsBack) {
         auto txn = Transaction::Begin(conn_);
         ASSERT_TRUE(txn.ok());
         ASSERT_TRUE(conn_.Execute("INSERT INTO t VALUES (1)").ok());
-    }   // no Commit: destructor must roll back
+    }  // no Commit: destructor must roll back
 
     EXPECT_EQ(CountRows(), 0);
 }
@@ -99,7 +99,7 @@ TEST_F(TransactionTest, MoveTransfersGuard) {
 
     Transaction b(std::move(a));
     EXPECT_TRUE(b.IsActive());
-    EXPECT_FALSE(a.IsActive());   // donor deactivated: no double rollback
+    EXPECT_FALSE(a.IsActive());  // donor deactivated: no double rollback
 
     ASSERT_TRUE(conn_.Execute("INSERT INTO t VALUES (1)").ok());
     ASSERT_TRUE(b.Commit().ok());

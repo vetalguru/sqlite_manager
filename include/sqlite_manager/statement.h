@@ -39,7 +39,7 @@ public:
     // first statement is an error (kMisuse): Execute() handles batches.
     static Result<Statement> Prepare(Connection& conn, const std::string& sql);
 
-    Statement() = default;   // empty (not prepared) state
+    Statement() = default;  // empty (not prepared) state
     ~Statement();
 
     Statement(const Statement&) = delete;

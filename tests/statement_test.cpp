@@ -18,10 +18,12 @@ class StatementTest : public ::testing::Test {
 protected:
     void SetUp() override {
         ASSERT_TRUE(conn_.Open(":memory:").ok());
-        ASSERT_TRUE(conn_.Execute(
-            "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, score REAL);"
-            "INSERT INTO t (name, score) VALUES ('alpha', 1.5), ('beta', 2.5);"
-        ).ok());
+        ASSERT_TRUE(conn_
+                        .Execute("CREATE TABLE t (id INTEGER PRIMARY KEY, name "
+                                 "TEXT, score REAL);"
+                                 "INSERT INTO t (name, score) VALUES ('alpha', "
+                                 "1.5), ('beta', 2.5);")
+                        .ok());
     }
 
     Connection conn_;
@@ -75,8 +77,8 @@ TEST_F(StatementTest, PrepareAllowsTrailingSemicolonAndWhitespace) {
 // ---------- Step / Column reads ----------
 
 TEST_F(StatementTest, ReadsAllRowsAndColumns) {
-    auto stmt = Statement::Prepare(
-        conn_, "SELECT id, name, score FROM t ORDER BY id");
+    auto stmt =
+        Statement::Prepare(conn_, "SELECT id, name, score FROM t ORDER BY id");
     ASSERT_TRUE(stmt.ok());
     Statement& s = stmt.value();
 
@@ -135,18 +137,21 @@ TEST_F(StatementTest, ColumnIsNullDetectsNull) {
     ASSERT_TRUE(step.ok());
     ASSERT_EQ(step.value(), StepResult::kRow);
     EXPECT_TRUE(s.ColumnIsNull(0));
-    EXPECT_TRUE(s.ColumnIsNull(1));   // score not set either
-    EXPECT_EQ(s.ColumnText(0), "");   // NULL reads as empty string
+    EXPECT_TRUE(s.ColumnIsNull(1));  // score not set either
+    EXPECT_EQ(s.ColumnText(0), "");  // NULL reads as empty string
 }
 
 // ---------- Binding ----------
 
 TEST_F(StatementTest, BindsAllTypes) {
-    ASSERT_TRUE(conn_.Execute(
-        "CREATE TABLE bt (i INTEGER, d REAL, s TEXT, b BLOB, n TEXT)").ok());
+    ASSERT_TRUE(
+        conn_
+            .Execute(
+                "CREATE TABLE bt (i INTEGER, d REAL, s TEXT, b BLOB, n TEXT)")
+            .ok());
 
-    auto insert = Statement::Prepare(
-        conn_, "INSERT INTO bt VALUES (?, ?, ?, ?, ?)");
+    auto insert =
+        Statement::Prepare(conn_, "INSERT INTO bt VALUES (?, ?, ?, ?, ?)");
     ASSERT_TRUE(insert.ok());
     Statement& ins = insert.value();
 
@@ -154,8 +159,8 @@ TEST_F(StatementTest, BindsAllTypes) {
     ASSERT_TRUE(ins.BindInt64(1, INT64_C(9007199254740993)).ok());
     ASSERT_TRUE(ins.BindDouble(2, 3.25).ok());
     ASSERT_TRUE(ins.BindText(3, "hello").ok());
-    ASSERT_TRUE(ins.BindBlob(4, blob.data(),
-                             static_cast<int>(blob.size())).ok());
+    ASSERT_TRUE(
+        ins.BindBlob(4, blob.data(), static_cast<int>(blob.size())).ok());
     ASSERT_TRUE(ins.BindNull(5).ok());
 
     auto step = ins.Step();
@@ -221,7 +226,7 @@ TEST_F(StatementTest, BindTextSurvivesSourceDestruction) {
     {
         std::string temp = "short-lived";
         ASSERT_TRUE(s.BindText(1, temp).ok());
-    }   // temp destroyed before Step: SQLITE_TRANSIENT must protect us
+    }  // temp destroyed before Step: SQLITE_TRANSIENT must protect us
 
     ASSERT_EQ(s.Step().value(), StepResult::kRow);
     EXPECT_EQ(s.ColumnText(0), "short-lived");
@@ -235,14 +240,14 @@ TEST_F(StatementTest, BindTextWithEmbeddedNul) {
     const std::string with_nul("ab\0cd", 5);
     ASSERT_TRUE(s.BindText(1, with_nul).ok());
     ASSERT_EQ(s.Step().value(), StepResult::kRow);
-    EXPECT_EQ(s.ColumnText(0), with_nul);   // size-based read keeps the NUL
+    EXPECT_EQ(s.ColumnText(0), with_nul);  // size-based read keeps the NUL
 }
 
 TEST_F(StatementTest, BindOutOfRangeIndexFails) {
     auto stmt = Statement::Prepare(conn_, "SELECT ?");
     ASSERT_TRUE(stmt.ok());
 
-    const Status s = stmt.value().BindInt64(2, 1);   // only 1 parameter
+    const Status s = stmt.value().BindInt64(2, 1);  // only 1 parameter
     ASSERT_FALSE(s.ok());
     EXPECT_EQ(s.error().code, ErrorCode::kRange);
 }
@@ -250,8 +255,8 @@ TEST_F(StatementTest, BindOutOfRangeIndexFails) {
 // ---------- Reset ----------
 
 TEST_F(StatementTest, ResetAllowsReExecution) {
-    auto stmt = Statement::Prepare(
-        conn_, "SELECT COUNT(*) FROM t WHERE id >= ?");
+    auto stmt =
+        Statement::Prepare(conn_, "SELECT COUNT(*) FROM t WHERE id >= ?");
     ASSERT_TRUE(stmt.ok());
     Statement& s = stmt.value();
 
@@ -286,7 +291,7 @@ TEST_F(StatementTest, MoveTransfersOwnership) {
 
     Statement b(std::move(a));
     EXPECT_TRUE(b.IsValid());
-    EXPECT_FALSE(a.IsValid());   // donor left empty
+    EXPECT_FALSE(a.IsValid());  // donor left empty
 
     ASSERT_EQ(b.Step().value(), StepResult::kRow);
     EXPECT_EQ(b.ColumnInt64(0), 42);
@@ -302,7 +307,7 @@ TEST_F(StatementTest, StatementFinalizedBeforeConnectionCloses) {
         const Status close_status = conn.Close();
         ASSERT_FALSE(close_status.ok());
         EXPECT_EQ(close_status.error().code, ErrorCode::kBusy);
-    }   // statement finalized here
+    }  // statement finalized here
     EXPECT_TRUE(conn.Close().ok());
 }
 

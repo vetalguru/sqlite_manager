@@ -13,10 +13,10 @@ namespace {
 
 // The views render a model directly, with no database involved.
 
-Cell Txt(std::string text)  { return {ValueType::kText, std::move(text)}; }
-Cell Int(std::string text)  { return {ValueType::kInteger, std::move(text)}; }
+Cell Txt(std::string text) { return {ValueType::kText, std::move(text)}; }
+Cell Int(std::string text) { return {ValueType::kInteger, std::move(text)}; }
 Cell Real(std::string text) { return {ValueType::kFloat, std::move(text)}; }
-Cell Null()                 { return {ValueType::kNull, {}}; }
+Cell Null() { return {ValueType::kNull, {}}; }
 
 std::string RenderTable(const QueryResult& result) {
     std::ostringstream out;

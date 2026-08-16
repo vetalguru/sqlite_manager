@@ -108,7 +108,7 @@ TEST(ArgParserTest, InlineValueMayContainEquals) {
     ArgParser parser;
     parser.Add({"--set"}, &expr, "");
 
-    ArgvBuilder args({"--set=a=b"});   // split on the FIRST '=' only
+    ArgvBuilder args({"--set=a=b"});  // split on the FIRST '=' only
     ASSERT_TRUE(parser.Parse(args.argc(), args.argv()));
     EXPECT_EQ(expr, "a=b");
 }
@@ -186,7 +186,7 @@ TEST(ArgParserTest, DoubleDashTerminatesOptions) {
 
     ArgvBuilder args({"--", "--flag", "-x"});
     ASSERT_TRUE(parser.Parse(args.argc(), args.argv()));
-    EXPECT_FALSE(flag);   // after "--" nothing is an option
+    EXPECT_FALSE(flag);  // after "--" nothing is an option
     ASSERT_EQ(parser.positional().size(), 2U);
     EXPECT_EQ(parser.positional()[0], "--flag");
     EXPECT_EQ(parser.positional()[1], "-x");
@@ -194,7 +194,7 @@ TEST(ArgParserTest, DoubleDashTerminatesOptions) {
 
 TEST(ArgParserTest, SingleDashIsPositional) {
     ArgParser parser;
-    ArgvBuilder args({"-"});   // conventionally means stdin
+    ArgvBuilder args({"-"});  // conventionally means stdin
     ASSERT_TRUE(parser.Parse(args.argc(), args.argv()));
     ASSERT_EQ(parser.positional().size(), 1U);
     EXPECT_EQ(parser.positional()[0], "-");
@@ -210,7 +210,7 @@ TEST(ArgParserTest, ParseIsRepeatable) {
 
     ArgvBuilder second({"two"});
     ASSERT_TRUE(parser.Parse(second.argc(), second.argv()));
-    ASSERT_EQ(parser.positional().size(), 1U);   // cleared between runs
+    ASSERT_EQ(parser.positional().size(), 1U);  // cleared between runs
     EXPECT_EQ(parser.positional()[0], "two");
 }
 

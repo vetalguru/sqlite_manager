@@ -22,8 +22,8 @@ using sqlite_manager::ValueType;
 // model, then renders it through `view`. Each cell records its storage
 // type and (for non-NULL values) its display text, so the view can
 // render faithfully. Returns exit code.
-int RunQuery(Statement& stmt, const ResultView& view,
-             std::ostream& out, std::ostream& err) {
+int RunQuery(Statement& stmt, const ResultView& view, std::ostream& out,
+             std::ostream& err) {
     const int columns = stmt.ColumnCount();
 
     QueryResult result;
@@ -59,8 +59,8 @@ int RunQuery(Statement& stmt, const ResultView& view,
 
 }  // namespace
 
-int ExecuteSql(Connection& conn, const std::string& sql,
-               const ResultView& view, std::ostream& out, std::ostream& err) {
+int ExecuteSql(Connection& conn, const std::string& sql, const ResultView& view,
+               std::ostream& out, std::ostream& err) {
     // Single statements go through Statement so result rows can be
     // rendered; batches fail Prepare and fall back to Execute.
     auto stmt = Statement::Prepare(conn, sql);

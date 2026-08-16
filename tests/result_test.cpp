@@ -1,4 +1,3 @@
-#include "sqlite_manager/error.h"
 #include "sqlite_manager/result.h"
 
 #include <gtest/gtest.h>
@@ -6,6 +5,8 @@
 
 #include <string>
 #include <utility>
+
+#include "sqlite_manager/error.h"
 
 namespace sqlite_manager {
 namespace {
@@ -115,12 +116,14 @@ TEST(ResultTest, TypicalCallSite) {
 #ifndef NDEBUG
 TEST(ResultDeathTest, ValueOnErrorAsserts) {
     Result<int> r = Error::FromSqlite(SQLITE_ERROR, "boom");
-    EXPECT_DEATH(static_cast<void>(r.value()), "value\\(\\) called on an error");
+    EXPECT_DEATH(static_cast<void>(r.value()),
+                 "value\\(\\) called on an error");
 }
 
 TEST(ResultDeathTest, ErrorOnValueAsserts) {
     Result<int> r = 1;
-    EXPECT_DEATH(static_cast<void>(r.error()), "error\\(\\) called on a success");
+    EXPECT_DEATH(static_cast<void>(r.error()),
+                 "error\\(\\) called on a success");
 }
 #endif
 
