@@ -22,6 +22,11 @@ Error NotPrepared() {
                  "statement is not prepared");
 }
 
+Error UnknownParameter(const std::string& name) {
+    return Error(ErrorCode::kRange, SQLITE_RANGE,
+                 "no such bind parameter: " + name);
+}
+
 }  // namespace
 
 Result<Statement> Statement::Prepare(Connection& conn,
@@ -126,47 +131,42 @@ Status Statement::BindNull(int index) {
     return Ok();
 }
 
-// --- Binding by name (delegates to the positional overloads) ---
-
-Result<int> Statement::ParameterIndex(const std::string& name) const {
-    if (stmt_ == nullptr) return NotPrepared();
-    const int index = sqlite3_bind_parameter_index(stmt_, name.c_str());
-    if (index == 0) {
-        return Error(ErrorCode::kRange, SQLITE_RANGE,
-                     "no such bind parameter: " + name);
-    }
-    return index;
-}
+// --- Binding by name (resolves the name, then binds by position) ---
 
 Status Statement::BindInt64(const std::string& name, std::int64_t value) {
-    auto index = ParameterIndex(name);
-    if (!index.ok()) return index.error();
-    return BindInt64(index.value(), value);
+    if (stmt_ == nullptr) return NotPrepared();
+    const int index = sqlite3_bind_parameter_index(stmt_, name.c_str());
+    if (index == 0) return UnknownParameter(name);
+    return BindInt64(index, value);
 }
 
 Status Statement::BindDouble(const std::string& name, double value) {
-    auto index = ParameterIndex(name);
-    if (!index.ok()) return index.error();
-    return BindDouble(index.value(), value);
+    if (stmt_ == nullptr) return NotPrepared();
+    const int index = sqlite3_bind_parameter_index(stmt_, name.c_str());
+    if (index == 0) return UnknownParameter(name);
+    return BindDouble(index, value);
 }
 
 Status Statement::BindText(const std::string& name, const std::string& value) {
-    auto index = ParameterIndex(name);
-    if (!index.ok()) return index.error();
-    return BindText(index.value(), value);
+    if (stmt_ == nullptr) return NotPrepared();
+    const int index = sqlite3_bind_parameter_index(stmt_, name.c_str());
+    if (index == 0) return UnknownParameter(name);
+    return BindText(index, value);
 }
 
 Status Statement::BindBlob(const std::string& name, const void* data,
                            int size) {
-    auto index = ParameterIndex(name);
-    if (!index.ok()) return index.error();
-    return BindBlob(index.value(), data, size);
+    if (stmt_ == nullptr) return NotPrepared();
+    const int index = sqlite3_bind_parameter_index(stmt_, name.c_str());
+    if (index == 0) return UnknownParameter(name);
+    return BindBlob(index, data, size);
 }
 
 Status Statement::BindNull(const std::string& name) {
-    auto index = ParameterIndex(name);
-    if (!index.ok()) return index.error();
-    return BindNull(index.value());
+    if (stmt_ == nullptr) return NotPrepared();
+    const int index = sqlite3_bind_parameter_index(stmt_, name.c_str());
+    if (index == 0) return UnknownParameter(name);
+    return BindNull(index);
 }
 
 // --- Execution ---
