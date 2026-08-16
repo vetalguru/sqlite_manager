@@ -18,19 +18,19 @@ add_library(sqlite_manager_warnings INTERFACE)
 target_compile_options(sqlite_manager_warnings INTERFACE
     -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 
-# Opt-in clang-tidy, wired onto project targets only (see .clang-tidy).
-# Off by default so a plain build never requires clang-tidy to be present.
+# Locate clang-tidy once, preferring the version CI pins (18) so a local
+# run matches CI. Shared by the opt-in in-build linting and the `lint`
+# target below.
+find_program(CLANG_TIDY_EXE NAMES clang-tidy-18 clang-tidy)
+
+# Opt-in in-build clang-tidy, wired onto project targets only (see
+# .clang-tidy). Off by default so a plain build never needs clang-tidy.
 option(SQLITE_MANAGER_ENABLE_CLANG_TIDY
     "Run clang-tidy on project sources during the build" OFF)
 
-if(SQLITE_MANAGER_ENABLE_CLANG_TIDY)
-    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
-    if(CLANG_TIDY_EXE)
-        message(STATUS "clang-tidy enabled: ${CLANG_TIDY_EXE}")
-    else()
-        message(WARNING
-            "SQLITE_MANAGER_ENABLE_CLANG_TIDY is ON but clang-tidy was not found")
-    endif()
+if(SQLITE_MANAGER_ENABLE_CLANG_TIDY AND NOT CLANG_TIDY_EXE)
+    message(WARNING
+        "SQLITE_MANAGER_ENABLE_CLANG_TIDY is ON but clang-tidy was not found")
 endif()
 
 # Applies clang-tidy to a target when enabled and available; a no-op
@@ -50,6 +50,23 @@ add_subdirectory(cli)
 if(PROJECT_IS_TOP_LEVEL)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# `cmake --build <build-dir> --target lint` runs clang-tidy over the
+# project sources exactly as the Lint CI workflow does - findings are
+# errors. Needs a compile database (the linux-debug preset exports one).
+# Run it before pushing to catch what CI's clang-tidy would flag.
+if(PROJECT_IS_TOP_LEVEL AND CLANG_TIDY_EXE)
+    file(GLOB lint_sources CONFIGURE_DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/cli/*.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp)
+    add_custom_target(lint
+        COMMAND ${CLANG_TIDY_EXE} -p ${CMAKE_BINARY_DIR}
+                --warnings-as-errors=* ${lint_sources}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Running clang-tidy (findings are errors)"
+        VERBATIM)
 endif()
 
 # Packaging: build a .deb of the CLI with, from the build directory:
