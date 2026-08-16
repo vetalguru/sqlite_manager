@@ -65,7 +65,8 @@ TEST(ConnectionTest, ExecuteCreatesTableAndInserts) {
     Connection conn;
     ASSERT_TRUE(conn.Open(":memory:").ok());
 
-    Status s = conn.Execute("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
+    Status s =
+        conn.Execute("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
     ASSERT_TRUE(s.ok()) << s.error().message;
 
     s = conn.Execute("INSERT INTO t (name) VALUES ('alpha'), ('beta')");
@@ -103,9 +104,10 @@ TEST(ConnectionTest, ExecuteOnClosedConnectionFailsWithMisuse) {
 TEST(ConnectionTest, ExecuteConstraintViolationMapsToConstraint) {
     Connection conn;
     ASSERT_TRUE(conn.Open(":memory:").ok());
-    ASSERT_TRUE(conn.Execute(
-        "CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT UNIQUE);"
-        "INSERT INTO t (v) VALUES ('dup');").ok());
+    ASSERT_TRUE(
+        conn.Execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT UNIQUE);"
+                     "INSERT INTO t (v) VALUES ('dup');")
+            .ok());
 
     const Status s = conn.Execute("INSERT INTO t (v) VALUES ('dup')");
     ASSERT_FALSE(s.ok());
@@ -117,8 +119,8 @@ TEST(ConnectionTest, ExecuteConstraintViolationMapsToConstraint) {
 TEST(ConnectionTest, LastInsertRowIdTracksInserts) {
     Connection conn;
     ASSERT_TRUE(conn.Open(":memory:").ok());
-    ASSERT_TRUE(conn.Execute(
-        "CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)").ok());
+    ASSERT_TRUE(
+        conn.Execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)").ok());
 
     ASSERT_TRUE(conn.Execute("INSERT INTO t (v) VALUES ('a')").ok());
     EXPECT_EQ(conn.LastInsertRowId(), 1);
@@ -166,7 +168,7 @@ TEST(ConnectionTest, BusyTimeoutSucceedsOnOpenConnection) {
     Connection conn;
     ASSERT_TRUE(conn.Open(":memory:").ok());
     EXPECT_TRUE(conn.BusyTimeout(500).ok());
-    EXPECT_TRUE(conn.BusyTimeout(0).ok());   // 0 disables the wait
+    EXPECT_TRUE(conn.BusyTimeout(0).ok());  // 0 disables the wait
 }
 
 TEST(ConnectionTest, BusyTimeoutOnClosedConnectionFailsWithMisuse) {
@@ -185,8 +187,8 @@ TEST(ConnectionTest, MoveConstructorTransfersOwnership) {
 
     Connection b(std::move(a));
     EXPECT_TRUE(b.IsOpen());
-    EXPECT_EQ(b.raw(), handle);   // same handle, new owner
-    EXPECT_FALSE(a.IsOpen());     // donor is left closed
+    EXPECT_EQ(b.raw(), handle);  // same handle, new owner
+    EXPECT_FALSE(a.IsOpen());    // donor is left closed
 }
 
 TEST(ConnectionTest, MoveAssignmentTransfersAndClosesOld) {
@@ -197,7 +199,7 @@ TEST(ConnectionTest, MoveAssignmentTransfersAndClosesOld) {
     Connection b;
     ASSERT_TRUE(b.Open(":memory:").ok());
 
-    b = std::move(a);             // b's old connection must be closed
+    b = std::move(a);  // b's old connection must be closed
     EXPECT_TRUE(b.IsOpen());
     EXPECT_FALSE(a.IsOpen());
     // The moved-in connection is fully functional:
@@ -211,7 +213,7 @@ TEST(ConnectionTest, SelfMoveAssignmentIsSafe) {
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wself-move"
-    a = std::move(a);              // intentional: tests the self-move guard
+    a = std::move(a);  // intentional: tests the self-move guard
 #pragma GCC diagnostic pop
     EXPECT_TRUE(a.IsOpen());
     EXPECT_EQ(a.raw(), handle);
@@ -226,9 +228,11 @@ TEST(ConnectionTest, CreatesAndReopensFileDatabase) {
     {
         Connection conn;
         ASSERT_TRUE(conn.Open(path).ok());
-        ASSERT_TRUE(conn.Execute(
-            "CREATE TABLE t (x INTEGER); INSERT INTO t VALUES (42);").ok());
-    }   // destructor closes and flushes
+        ASSERT_TRUE(
+            conn.Execute(
+                    "CREATE TABLE t (x INTEGER); INSERT INTO t VALUES (42);")
+                .ok());
+    }  // destructor closes and flushes
 
     Connection conn;
     ASSERT_TRUE(conn.Open(path).ok());
@@ -259,8 +263,7 @@ TEST(ConnectionTest, ReadOnlyModeRejectsWrites) {
 }
 
 TEST(ConnectionTest, ReadOnlyModeFailsOnMissingFile) {
-    const std::string path =
-        ::testing::TempDir() + "no_such_file_98765.sqlite";
+    const std::string path = ::testing::TempDir() + "no_such_file_98765.sqlite";
     std::remove(path.c_str());
 
     Connection conn;

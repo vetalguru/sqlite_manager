@@ -64,7 +64,7 @@ int Repl::Run() {
     while (true) {
         const std::string prompt = buffer.empty() ? "sql> " : "...> ";
         std::optional<std::string> line = reader_.ReadLine(prompt);
-        if (!line) break;   // EOF
+        if (!line) break;  // EOF
 
         // Dot commands are recognized only at the start of a statement.
         if (buffer.empty()) {
@@ -84,7 +84,7 @@ int Repl::Run() {
             ExecuteSql(conn_, buffer, view_, out_, err_);
             buffer.clear();
         } else if (Trim(buffer).empty()) {
-            buffer.clear();   // blank input, no continuation prompt
+            buffer.clear();  // blank input, no continuation prompt
         }
     }
 

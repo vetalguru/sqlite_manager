@@ -55,38 +55,70 @@ ErrorCode ToErrorCode(int sqlite_code) {
 
 const char* ErrorCodeName(ErrorCode code) {
     switch (code) {
-        case ErrorCode::kOk:         return "kOk";
-        case ErrorCode::kError:      return "kError";
-        case ErrorCode::kInternal:   return "kInternal";
-        case ErrorCode::kPerm:       return "kPerm";
-        case ErrorCode::kAbort:      return "kAbort";
-        case ErrorCode::kBusy:       return "kBusy";
-        case ErrorCode::kLocked:     return "kLocked";
-        case ErrorCode::kNoMem:      return "kNoMem";
-        case ErrorCode::kReadOnly:   return "kReadOnly";
-        case ErrorCode::kInterrupt:  return "kInterrupt";
-        case ErrorCode::kIoErr:      return "kIoErr";
-        case ErrorCode::kCorrupt:    return "kCorrupt";
-        case ErrorCode::kNotFound:   return "kNotFound";
-        case ErrorCode::kFull:       return "kFull";
-        case ErrorCode::kCantOpen:   return "kCantOpen";
-        case ErrorCode::kProtocol:   return "kProtocol";
-        case ErrorCode::kEmpty:      return "kEmpty";
-        case ErrorCode::kSchema:     return "kSchema";
-        case ErrorCode::kTooBig:     return "kTooBig";
-        case ErrorCode::kConstraint: return "kConstraint";
-        case ErrorCode::kMismatch:   return "kMismatch";
-        case ErrorCode::kMisuse:     return "kMisuse";
-        case ErrorCode::kNoLfs:      return "kNoLfs";
-        case ErrorCode::kAuth:       return "kAuth";
-        case ErrorCode::kFormat:     return "kFormat";
-        case ErrorCode::kRange:      return "kRange";
-        case ErrorCode::kNotADb:     return "kNotADb";
-        case ErrorCode::kNotice:     return "kNotice";
-        case ErrorCode::kWarning:    return "kWarning";
-        case ErrorCode::kRow:        return "kRow";
-        case ErrorCode::kDone:       return "kDone";
-        case ErrorCode::kUnknown:    return "kUnknown";
+        case ErrorCode::kOk:
+            return "kOk";
+        case ErrorCode::kError:
+            return "kError";
+        case ErrorCode::kInternal:
+            return "kInternal";
+        case ErrorCode::kPerm:
+            return "kPerm";
+        case ErrorCode::kAbort:
+            return "kAbort";
+        case ErrorCode::kBusy:
+            return "kBusy";
+        case ErrorCode::kLocked:
+            return "kLocked";
+        case ErrorCode::kNoMem:
+            return "kNoMem";
+        case ErrorCode::kReadOnly:
+            return "kReadOnly";
+        case ErrorCode::kInterrupt:
+            return "kInterrupt";
+        case ErrorCode::kIoErr:
+            return "kIoErr";
+        case ErrorCode::kCorrupt:
+            return "kCorrupt";
+        case ErrorCode::kNotFound:
+            return "kNotFound";
+        case ErrorCode::kFull:
+            return "kFull";
+        case ErrorCode::kCantOpen:
+            return "kCantOpen";
+        case ErrorCode::kProtocol:
+            return "kProtocol";
+        case ErrorCode::kEmpty:
+            return "kEmpty";
+        case ErrorCode::kSchema:
+            return "kSchema";
+        case ErrorCode::kTooBig:
+            return "kTooBig";
+        case ErrorCode::kConstraint:
+            return "kConstraint";
+        case ErrorCode::kMismatch:
+            return "kMismatch";
+        case ErrorCode::kMisuse:
+            return "kMisuse";
+        case ErrorCode::kNoLfs:
+            return "kNoLfs";
+        case ErrorCode::kAuth:
+            return "kAuth";
+        case ErrorCode::kFormat:
+            return "kFormat";
+        case ErrorCode::kRange:
+            return "kRange";
+        case ErrorCode::kNotADb:
+            return "kNotADb";
+        case ErrorCode::kNotice:
+            return "kNotice";
+        case ErrorCode::kWarning:
+            return "kWarning";
+        case ErrorCode::kRow:
+            return "kRow";
+        case ErrorCode::kDone:
+            return "kDone";
+        case ErrorCode::kUnknown:
+            return "kUnknown";
     }
     return "kUnknown";  // unreachable, silences -Wreturn-type
 }

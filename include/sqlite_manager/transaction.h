@@ -27,8 +27,8 @@ public:
     // or a transaction is already active on it.
     static Result<Transaction> Begin(Connection& conn);
 
-    Transaction() = default;   // inactive state
-    ~Transaction();            // rolls back if still active
+    Transaction() = default;  // inactive state
+    ~Transaction();           // rolls back if still active
 
     Transaction(const Transaction&) = delete;
     Transaction& operator=(const Transaction&) = delete;
@@ -49,7 +49,7 @@ public:
 private:
     explicit Transaction(Connection* conn) : conn_(conn) {}
 
-    Connection* conn_ = nullptr;   // not owned; nullptr = inactive
+    Connection* conn_ = nullptr;  // not owned; nullptr = inactive
 };
 
 }  // namespace sqlite_manager

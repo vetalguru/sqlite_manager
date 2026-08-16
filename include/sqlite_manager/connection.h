@@ -14,9 +14,9 @@ class Connection final {
 public:
     // How Open() accesses the database file.
     enum class OpenMode {
-        kReadWriteCreate,   // default: read/write, create if missing
-        kReadWrite,         // read/write, fail if the file does not exist
-        kReadOnly           // read only, fail if the file does not exist
+        kReadWriteCreate,  // default: read/write, create if missing
+        kReadWrite,        // read/write, fail if the file does not exist
+        kReadOnly          // read only, fail if the file does not exist
     };
 
     Connection() = default;

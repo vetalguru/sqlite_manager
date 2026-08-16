@@ -40,13 +40,27 @@ std::string JsonString(const std::string& value) {
     for (const char ch : value) {
         const auto c = static_cast<unsigned char>(ch);
         switch (c) {
-            case '"':  out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            case '\b': out += "\\b"; break;
-            case '\f': out += "\\f"; break;
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            case '\b':
+                out += "\\b";
+                break;
+            case '\f':
+                out += "\\f";
+                break;
             default:
                 if (c < 0x20) {
                     std::array<char, 7> buf{};

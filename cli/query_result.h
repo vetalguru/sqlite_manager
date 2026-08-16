@@ -17,12 +17,12 @@ using sqlite_manager::ValueType;
 // serves table and CSV output directly.
 struct Cell {
     ValueType type = ValueType::kNull;
-    std::string text;   // display text of the value; empty when NULL
+    std::string text;  // display text of the value; empty when NULL
 };
 
 struct QueryResult {
-    std::vector<std::string> columns;       // header names, left to right
-    std::vector<std::vector<Cell>> rows;    // one inner vector per row
+    std::vector<std::string> columns;     // header names, left to right
+    std::vector<std::vector<Cell>> rows;  // one inner vector per row
 };
 
 }  // namespace sqlite_manager_cli

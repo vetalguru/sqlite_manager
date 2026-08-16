@@ -1,10 +1,10 @@
 #include "line_reader.h"
 
+#include <isocline.h>
+
 #include <cstdlib>
 #include <istream>
 #include <ostream>
-
-#include <isocline.h>
 
 namespace sqlite_manager_cli {
 
@@ -24,16 +24,16 @@ std::optional<std::string> StreamLineReader::ReadLine(
 }
 
 IsoclineLineReader::IsoclineLineReader() {
-    ic_set_history(nullptr, 1000);   // in-memory history, 1000 entries
-    ic_enable_multiline(false);      // our Repl handles multi-line SQL
-    ic_set_prompt_marker("", "");    // no extra marker, prompt as given
+    ic_set_history(nullptr, 1000);  // in-memory history, 1000 entries
+    ic_enable_multiline(false);     // our Repl handles multi-line SQL
+    ic_set_prompt_marker("", "");   // no extra marker, prompt as given
 }
 
 std::optional<std::string> IsoclineLineReader::ReadLine(
     const std::string& prompt) {
     char* raw = ic_readline(prompt.c_str());
     if (raw == nullptr) {
-        return std::nullopt;   // EOF / Ctrl-D
+        return std::nullopt;  // EOF / Ctrl-D
     }
     std::string line = raw;
     // isocline allocates with malloc; we own the buffer.

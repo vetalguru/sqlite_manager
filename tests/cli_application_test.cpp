@@ -39,8 +39,7 @@ struct RunResult {
     std::string err;
 };
 
-RunResult RunApp(std::vector<std::string> args,
-                 const std::string& input = "") {
+RunResult RunApp(std::vector<std::string> args, const std::string& input = "") {
     std::istringstream in(input);
     std::ostringstream out;
     std::ostringstream err;
@@ -115,8 +114,8 @@ TEST(CliApplicationTest, DdlPrintsOk) {
 }
 
 TEST(CliApplicationTest, BatchPrintsOk) {
-    const RunResult r = RunApp(
-        {":memory:", "CREATE TABLE t (x); INSERT INTO t VALUES (1);"});
+    const RunResult r =
+        RunApp({":memory:", "CREATE TABLE t (x); INSERT INTO t VALUES (1);"});
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_EQ(r.out, "OK\n");
 }
@@ -158,23 +157,23 @@ TEST(CliApplicationTest, ColumnsArePaddedToWidestValue) {
 
 TEST(CliApplicationTest, CsvFormatOutput) {
     const RunResult r = RunApp(
-        {"--format", "csv", ":memory:",
-         "SELECT 1 AS a, 'x' AS b UNION ALL SELECT 22, 'y'"});
+        {"--format", "csv",
+         ":memory:", "SELECT 1 AS a, 'x' AS b UNION ALL SELECT 22, 'y'"});
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_EQ(r.out, "a,b\n1,x\n22,y\n");
 }
 
 TEST(CliApplicationTest, CsvQuotesSpecialFieldsAndEmptiesNull) {
-    const RunResult r = RunApp(
-        {"--format", "csv", ":memory:", "SELECT 'a,b' AS c, NULL AS d"});
+    const RunResult r =
+        RunApp({"--format", "csv", ":memory:", "SELECT 'a,b' AS c, NULL AS d"});
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_EQ(r.out, "c,d\n\"a,b\",\n");
 }
 
 TEST(CliApplicationTest, JsonFormatOutput) {
     const RunResult r = RunApp(
-        {"--format", "json", ":memory:",
-         "SELECT 1 AS id, 'x' AS name UNION ALL SELECT 2, NULL"});
+        {"--format", "json",
+         ":memory:", "SELECT 1 AS id, 'x' AS name UNION ALL SELECT 2, NULL"});
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_EQ(r.out,
               "[\n"
@@ -184,8 +183,8 @@ TEST(CliApplicationTest, JsonFormatOutput) {
 }
 
 TEST(CliApplicationTest, JsonEmitsNumbersUnquoted) {
-    const RunResult r = RunApp(
-        {"--format", "json", ":memory:", "SELECT 42 AS i, 1.5 AS r"});
+    const RunResult r =
+        RunApp({"--format", "json", ":memory:", "SELECT 42 AS i, 1.5 AS r"});
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_EQ(r.out,
               "[\n"
@@ -214,8 +213,8 @@ protected:
 };
 
 TEST_F(CliApplicationFileTest, DataPersistsBetweenRuns) {
-    const RunResult create = RunApp(
-        {path_, "CREATE TABLE t (x); INSERT INTO t VALUES (42);"});
+    const RunResult create =
+        RunApp({path_, "CREATE TABLE t (x); INSERT INTO t VALUES (42);"});
     ASSERT_EQ(create.exit_code, 0);
 
     const RunResult read = RunApp({path_, "SELECT x FROM t"});
@@ -226,8 +225,8 @@ TEST_F(CliApplicationFileTest, DataPersistsBetweenRuns) {
 TEST_F(CliApplicationFileTest, ReadonlyRejectsWrites) {
     ASSERT_EQ(RunApp({path_, "CREATE TABLE t (x)"}).exit_code, 0);
 
-    const RunResult r = RunApp(
-        {"--readonly", path_, "INSERT INTO t VALUES (1)"});
+    const RunResult r =
+        RunApp({"--readonly", path_, "INSERT INTO t VALUES (1)"});
     EXPECT_EQ(r.exit_code, 1);
     EXPECT_NE(r.err.find("readonly"), std::string::npos);
 }
@@ -241,8 +240,8 @@ TEST_F(CliApplicationFileTest, ReadonlyMissingFileFails) {
 // ---------- REPL mode (one positional argument) ----------
 
 TEST(CliApplicationReplTest, ExecutesSqlAndQuits) {
-    const RunResult r = RunApp({"--batch", ":memory:"},
-                               "SELECT 1+1 AS v;\n.quit\n");
+    const RunResult r =
+        RunApp({"--batch", ":memory:"}, "SELECT 1+1 AS v;\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_EQ(r.out,
               "+---+\n"
@@ -260,8 +259,8 @@ TEST(CliApplicationReplTest, EofEndsTheShell) {
 }
 
 TEST(CliApplicationReplTest, MultilineSqlAccumulatesUntilSemicolon) {
-    const RunResult r = RunApp({"--batch", ":memory:"},
-                               "SELECT\n1+2\n;\n.quit\n");
+    const RunResult r =
+        RunApp({"--batch", ":memory:"}, "SELECT\n1+2\n;\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
     // The unaliased expression names the column "1+2" (width 3),
     // so the value cell is padded: "| 3   |".
@@ -269,18 +268,18 @@ TEST(CliApplicationReplTest, MultilineSqlAccumulatesUntilSemicolon) {
 }
 
 TEST(CliApplicationReplTest, SqlErrorDoesNotTerminateLoop) {
-    const RunResult r = RunApp({"--batch", ":memory:"},
-                               "SELEKT 1;\nSELECT 2;\n.quit\n");
+    const RunResult r =
+        RunApp({"--batch", ":memory:"}, "SELEKT 1;\nSELECT 2;\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_NE(r.err.find("Error:"), std::string::npos);
-    EXPECT_NE(r.out.find("| 2 |"), std::string::npos);   // loop survived
+    EXPECT_NE(r.out.find("| 2 |"), std::string::npos);  // loop survived
 }
 
 TEST(CliApplicationReplTest, StatePersistsAcrossStatements) {
-    const RunResult r = RunApp(
-        {"--batch", ":memory:"},
-        "CREATE TABLE t (x);\nINSERT INTO t VALUES (7);\n"
-        "SELECT x FROM t;\n.quit\n");
+    const RunResult r =
+        RunApp({"--batch", ":memory:"},
+               "CREATE TABLE t (x);\nINSERT INTO t VALUES (7);\n"
+               "SELECT x FROM t;\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_EQ(r.out,
               "OK\nOK\n"
@@ -328,8 +327,7 @@ TEST(CliApplicationReplTest, PromptsAreShownWithoutBatch) {
 }
 
 TEST(CliApplicationReplTest, BatchSuppressesPrompts) {
-    const RunResult r = RunApp({"--batch", ":memory:"},
-                               "SELECT 1;\n.quit\n");
+    const RunResult r = RunApp({"--batch", ":memory:"}, "SELECT 1;\n.quit\n");
     EXPECT_EQ(r.out.find("sql>"), std::string::npos);
 }
 
@@ -344,9 +342,8 @@ TEST(CliApplicationReplTest, PendingInputRunsOnEof) {
 TEST(CliApplicationReplTest, ReadonlyAppliesInRepl) {
     // :memory: opens fine in readonly (no file needed), but writing
     // into it must fail - verifies the mode reaches the REPL.
-    const RunResult r = RunApp(
-        {"--batch", "--readonly", ":memory:"},
-        "CREATE TABLE t (x);\n.quit\n");
+    const RunResult r = RunApp({"--batch", "--readonly", ":memory:"},
+                               "CREATE TABLE t (x);\n.quit\n");
     EXPECT_EQ(r.exit_code, 0);
     EXPECT_NE(r.err.find("Error:"), std::string::npos);
 }

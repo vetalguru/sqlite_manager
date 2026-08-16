@@ -22,8 +22,7 @@ int ToSqliteFlags(Connection::OpenMode mode) {
 
 // Captures the current error state of a connection into an Error.
 Error MakeError(sqlite3* db) {
-    return Error::FromSqlite(sqlite3_extended_errcode(db),
-                             sqlite3_errmsg(db));
+    return Error::FromSqlite(sqlite3_extended_errcode(db), sqlite3_errmsg(db));
 }
 }  // namespace
 
@@ -52,12 +51,12 @@ Status Connection::Open(const std::string& path, OpenMode mode) {
     }
 
     sqlite3* db = nullptr;
-    const int rc = sqlite3_open_v2(path.c_str(), &db,
-                                   ToSqliteFlags(mode), nullptr);
+    const int rc =
+        sqlite3_open_v2(path.c_str(), &db, ToSqliteFlags(mode), nullptr);
     if (rc != SQLITE_OK) {
         Error error = (db != nullptr)
-            ? MakeError(db)
-            : Error::FromSqlite(rc, sqlite3_errstr(rc));
+                          ? MakeError(db)
+                          : Error::FromSqlite(rc, sqlite3_errstr(rc));
         sqlite3_close(db);
         return error;
     }

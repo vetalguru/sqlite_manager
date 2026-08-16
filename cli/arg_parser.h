@@ -40,9 +40,7 @@ public:
     // error() then contains a human-readable message.
     bool Parse(int argc, char** argv);
 
-    const std::vector<std::string>& positional() const {
-        return positional_;
-    }
+    const std::vector<std::string>& positional() const { return positional_; }
     const std::string& error() const { return error_; }
 
     // One line per option: aliases followed by its help string.
@@ -57,7 +55,7 @@ private:
 
     Option* Find(const std::string& name);
 
-    std::vector<Option> options_;   // vector keeps --help in Add() order
+    std::vector<Option> options_;  // vector keeps --help in Add() order
     std::vector<std::string> positional_;
     std::string error_;
 };
