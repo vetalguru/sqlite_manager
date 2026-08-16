@@ -56,6 +56,16 @@ public:
     Status BindBlob(int index, const void* data, int size);
     Status BindNull(int index);
 
+    // --- Binding by name ---
+    // Pass the full parameter name including its leading sigil, as in
+    // SQLite: ":name", "@name" or "$name". Fails with kRange if no such
+    // parameter exists in the statement.
+    Status BindInt64(const std::string& name, std::int64_t value);
+    Status BindDouble(const std::string& name, double value);
+    Status BindText(const std::string& name, const std::string& value);
+    Status BindBlob(const std::string& name, const void* data, int size);
+    Status BindNull(const std::string& name);
+
     // --- Execution ---
     // Advances one row. kRow: a row is ready to read. kDone: finished.
     Result<StepResult> Step();
@@ -79,6 +89,10 @@ public:
 
 private:
     explicit Statement(sqlite3_stmt* stmt) : stmt_(stmt) {}
+
+    // Resolves a bind-parameter name to its 1-based index (kRange if the
+    // name is absent, kMisuse if the statement is not prepared).
+    Result<int> ParameterIndex(const std::string& name) const;
 
     sqlite3_stmt* stmt_ = nullptr;
 };
