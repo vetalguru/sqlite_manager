@@ -37,14 +37,18 @@ private:
     bool show_prompts_;
 };
 
-// Interactive reader with line editing and in-memory history.
-// Reads from the real terminal (stdin); degrades to plain reads
-// automatically when stdin is not a TTY (isocline behavior).
+// Interactive reader with line editing and history persisted across
+// sessions (in "$HOME/.sqlite_manager_history", or in-memory if no home
+// directory is known). Reads from the real terminal (stdin); degrades
+// to plain reads automatically when stdin is not a TTY (isocline).
 class IsoclineLineReader final : public LineReader {
 public:
     IsoclineLineReader();
 
     std::optional<std::string> ReadLine(const std::string& prompt) override;
+
+private:
+    std::string history_path_;   // empty when history is in-memory only
 };
 
 }  // namespace sqlite_manager_cli
