@@ -55,6 +55,14 @@ Show the list of dot commands.
 .B .tables
 List the tables in the database.
 .TP
+.BI .schema " [TABLE]"
+Show the CREATE statements for every object, or just for
+.IR TABLE .
+.TP
+.BI .read " FILE"
+Execute the SQL statements contained in
+.IR FILE .
+.TP
 .BR .quit ", " .exit
 Leave the shell. End-of-input (Ctrl\-D) does the same.
 .SH "EXIT STATUS"

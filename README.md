@@ -49,7 +49,7 @@ The binary is `build/<config>/cli/sqlite-manager`.
 ```
 
 In the shell, statements end with `;`. Dot commands: `.help`, `.tables`,
-`.quit` / `.exit` (or Ctrl-D).
+`.schema [TABLE]`, `.read FILE`, `.quit` / `.exit` (or Ctrl-D).
 
 ```
 sql> SELECT 1 AS id, 'M855' AS name;
