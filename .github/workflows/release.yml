@@ -1,0 +1,52 @@
+name: Release
+
+# Publish a GitHub Release when a component tag is pushed. For CLI tags
+# (cli-v*) the release build's .deb is attached; library tags (lib-v*)
+# get a notes-only release. See RELEASING.md.
+on:
+  push:
+    tags:
+      - 'cli-v*'
+      - 'lib-v*'
+
+# One publish per tag; never cancel a release mid-upload.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # create releases and upload assets
+
+jobs:
+  release:
+    name: ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Full history and tags: the version is derived from git, and
+          # release notes are generated against the previous tag.
+          fetch-depth: 0
+
+      - name: Build the CLI .deb
+        if: startsWith(github.ref_name, 'cli-v')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build dpkg-dev
+          cmake --preset linux-release
+          cmake --build build/release
+          cd build/release && cpack -G DEB
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=()
+          for f in build/release/*.deb; do
+            [ -e "$f" ] && assets+=("$f")
+          done
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            "${assets[@]}"

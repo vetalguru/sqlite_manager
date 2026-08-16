@@ -38,7 +38,16 @@ Tagging a release resets it to 0; the next commit to that component makes it 1.
    The tag name should match the version being released. Both components can be
    released together (two tags on the same commit) or independently.
 
+5. **Let CI publish the release.** Pushing the tag triggers the `Release`
+   workflow (`.github/workflows/release.yml`), which creates a GitHub Release
+   with auto-generated notes. For a `cli-v*` tag it also builds the release
+   `.deb` and attaches it; a `lib-v*` tag gets a notes-only release. No manual
+   upload is needed.
+
 ## Building release artifacts
+
+CI attaches the `.deb` to `cli-v*` releases automatically (step 5 above). To
+build it by hand — for a local check or an off-CI release:
 
 The CLI `.deb` is produced from a release build:
 
