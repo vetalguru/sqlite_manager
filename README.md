@@ -208,17 +208,21 @@ ctest --preset linux-debug            # or: ctest --test-dir build/debug
 
 ## Checks
 
-**Static analysis (clang-tidy)** — enable it as part of the build:
+**Static analysis (clang-tidy)** — the `lint` target runs exactly what the
+Lint CI workflow does (findings are errors); run it before pushing:
+
+```bash
+cmake --preset linux-debug              # once, to generate the compile database
+cmake --build build/debug --target lint
+```
+
+CI pins `clang-tidy-18`; install the same version locally
+(`sudo apt-get install clang-tidy-18`) for results identical to CI. You can
+also enable clang-tidy inline during a normal build:
 
 ```bash
 cmake --preset linux-debug -DSQLITE_MANAGER_ENABLE_CLANG_TIDY=ON
 cmake --build build/debug
-```
-
-or run it standalone against the compile database:
-
-```bash
-clang-tidy -p build/debug src/*.cpp cli/*.cpp
 ```
 
 **Sanitizers (AddressSanitizer + UndefinedBehaviorSanitizer)** — build and test

@@ -22,11 +22,11 @@ jobs:
           fetch-depth: 0
 
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y ninja-build clang-tidy
+        run: sudo apt-get update &&
+             sudo apt-get install -y ninja-build clang-tidy-18
 
       - name: Configure (generate compile_commands.json)
         run: cmake --preset linux-debug
 
-      - name: clang-tidy (findings fail the build)
-        run: clang-tidy -p build/debug --warnings-as-errors='*'
-             src/*.cpp cli/*.cpp tests/*.cpp
+      - name: Lint (clang-tidy; findings fail the build)
+        run: cmake --build build/debug --target lint
