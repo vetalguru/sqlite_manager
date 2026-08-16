@@ -184,6 +184,22 @@ db.Execute("UPDATE users SET name = 'Ada' WHERE id = 1");
 const std::int64_t updated = db.Changes();   // rows affected: 1
 ```
 
+Prepared statements bind parameters by position (`?`) or by name (`:name`):
+
+```cpp
+#include "sqlite_manager/statement.h"
+
+auto q = sqlite_manager::Statement::Prepare(
+    db, "SELECT name FROM users WHERE id = :id");
+if (q) {
+    q.value().BindInt64(":id", id);
+    while (q.value().Step().value() ==
+           sqlite_manager::Statement::StepResult::kRow) {
+        const std::string name = q.value().ColumnText(0);
+    }
+}
+```
+
 ## Tests
 
 ```bash

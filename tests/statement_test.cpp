@@ -173,6 +173,46 @@ TEST_F(StatementTest, BindsAllTypes) {
     EXPECT_TRUE(sel.ColumnIsNull(4));
 }
 
+TEST_F(StatementTest, BindsByName) {
+    auto stmt = Statement::Prepare(conn_, "SELECT :a + :b AS sum");
+    ASSERT_TRUE(stmt.ok());
+    Statement& s = stmt.value();
+    ASSERT_TRUE(s.BindInt64(":a", 10).ok());
+    ASSERT_TRUE(s.BindInt64(":b", 32).ok());
+
+    auto step = s.Step();
+    ASSERT_TRUE(step.ok());
+    ASSERT_EQ(step.value(), StepResult::kRow);
+    EXPECT_EQ(s.ColumnInt64(0), 42);
+}
+
+TEST_F(StatementTest, BindsTextAndNullByName) {
+    auto stmt = Statement::Prepare(conn_, "SELECT :name, :maybe");
+    ASSERT_TRUE(stmt.ok());
+    Statement& s = stmt.value();
+    ASSERT_TRUE(s.BindText(":name", "ada").ok());
+    ASSERT_TRUE(s.BindNull(":maybe").ok());
+
+    ASSERT_EQ(s.Step().value(), StepResult::kRow);
+    EXPECT_EQ(s.ColumnText(0), "ada");
+    EXPECT_TRUE(s.ColumnIsNull(1));
+}
+
+TEST_F(StatementTest, BindUnknownNameFailsWithRange) {
+    auto stmt = Statement::Prepare(conn_, "SELECT :x");
+    ASSERT_TRUE(stmt.ok());
+    const Status s = stmt.value().BindInt64(":nope", 1);
+    ASSERT_FALSE(s.ok());
+    EXPECT_EQ(s.error().code, ErrorCode::kRange);
+}
+
+TEST_F(StatementTest, BindByNameOnEmptyStatementFailsWithMisuse) {
+    Statement s;
+    const Status st = s.BindInt64(":x", 1);
+    ASSERT_FALSE(st.ok());
+    EXPECT_EQ(st.error().code, ErrorCode::kMisuse);
+}
+
 TEST_F(StatementTest, BindTextSurvivesSourceDestruction) {
     auto stmt = Statement::Prepare(conn_, "SELECT ?");
     ASSERT_TRUE(stmt.ok());

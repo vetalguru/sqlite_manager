@@ -126,6 +126,49 @@ Status Statement::BindNull(int index) {
     return Ok();
 }
 
+// --- Binding by name (delegates to the positional overloads) ---
+
+Result<int> Statement::ParameterIndex(const std::string& name) const {
+    if (stmt_ == nullptr) return NotPrepared();
+    const int index = sqlite3_bind_parameter_index(stmt_, name.c_str());
+    if (index == 0) {
+        return Error(ErrorCode::kRange, SQLITE_RANGE,
+                     "no such bind parameter: " + name);
+    }
+    return index;
+}
+
+Status Statement::BindInt64(const std::string& name, std::int64_t value) {
+    auto index = ParameterIndex(name);
+    if (!index.ok()) return index.error();
+    return BindInt64(index.value(), value);
+}
+
+Status Statement::BindDouble(const std::string& name, double value) {
+    auto index = ParameterIndex(name);
+    if (!index.ok()) return index.error();
+    return BindDouble(index.value(), value);
+}
+
+Status Statement::BindText(const std::string& name, const std::string& value) {
+    auto index = ParameterIndex(name);
+    if (!index.ok()) return index.error();
+    return BindText(index.value(), value);
+}
+
+Status Statement::BindBlob(const std::string& name, const void* data,
+                           int size) {
+    auto index = ParameterIndex(name);
+    if (!index.ok()) return index.error();
+    return BindBlob(index.value(), data, size);
+}
+
+Status Statement::BindNull(const std::string& name) {
+    auto index = ParameterIndex(name);
+    if (!index.ok()) return index.error();
+    return BindNull(index.value());
+}
+
 // --- Execution ---
 
 Result<Statement::StepResult> Statement::Step() {
