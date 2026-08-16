@@ -255,6 +255,9 @@ while `PATCH` is derived from git — the number of commits touching the
 component's sources since its last release tag (`lib-v*` for the library,
 `cli-v*` for the CLI). See `cmake/GitVersion.cmake`.
 
+Notable changes are recorded in [CHANGELOG.md](CHANGELOG.md); the release
+procedure is in [RELEASING.md](RELEASING.md).
+
 ## License
 
 See [LICENSE](LICENSE).
