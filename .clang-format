@@ -1,0 +1,9 @@
+---
+# Locks in the project's existing style. Based on Google, but with a
+# 4-space indent and access specifiers flush to the class body.
+BasedOnStyle: Google
+IndentWidth: 4
+AccessModifierOffset: -4
+ColumnLimit: 80
+DerivePointerAlignment: false
+PointerAlignment: Left
