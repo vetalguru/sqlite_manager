@@ -4,6 +4,7 @@
 #include <glibmm/ustring.h>
 #include <gtkmm/applicationwindow.h>
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -34,6 +35,9 @@ private:
     void OnObjectSelected(const ObjectInfo& object);
     void OnRunSql();
     void RunSqlText(const std::string& sql);
+    void LoadTable(const std::string& table);
+    bool OnCellEdited(std::int64_t rowid, const std::string& column,
+                      const std::string& new_text);
     void ReportError(const Glib::ustring& message);
 
     std::optional<DatabaseSession> session_;
@@ -41,6 +45,7 @@ private:
     ResultGrid* grid_ = nullptr;
     Gtk::Entry* sql_entry_ = nullptr;
     Gtk::Label* status_ = nullptr;
+    std::string edit_table_;  // table backing an editable grid; empty if none
 };
 
 }  // namespace sqlite_manager_gui::gtk
