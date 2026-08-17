@@ -53,3 +53,22 @@ jobs:
           name: sqlite-manager-deb
           path: ${{ matrix.dir }}/*.deb
           if-no-files-found: error
+
+  gui-build:
+    name: linux-gui
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install build tools and gtkmm
+        run: sudo apt-get update &&
+             sudo apt-get install -y ninja-build libgtkmm-4.0-dev
+
+      - name: Configure
+        run: cmake --preset linux-debug -DSQLITE_MANAGER_BUILD_GUI=ON
+
+      - name: Build the GUI
+        run: cmake --build build/debug --target sqlite-manager-gui
