@@ -14,11 +14,16 @@
 #include <gtkmm/label.h>
 #include <gtkmm/paned.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "gui/gtk/result_grid.h"
 #include "gui/gtk/schema_sidebar.h"
+#include "sqlite_manager/query_result.h"
 #include "sqlite_manager/sql_util.h"
 
 namespace sqlite_manager_gui::gtk {
@@ -58,6 +63,11 @@ MainWindow::MainWindow() {
 
     grid_ = Gtk::make_managed<ResultGrid>();
     grid_->set_vexpand(true);
+    grid_->set_edit_handler([this](std::int64_t rowid,
+                                   const std::string& column,
+                                   const std::string& new_text) {
+        return OnCellEdited(rowid, column, new_text);
+    });
 
     status_ = Gtk::make_managed<Gtk::Label>("Open a database to begin.");
     status_->set_halign(Gtk::Align::START);
@@ -116,21 +126,57 @@ void MainWindow::RefreshSchema() {
 
 void MainWindow::OnObjectSelected(const ObjectInfo& object) {
     if (!session_) return;
-    if (object.kind == ObjectKind::kTable || object.kind == ObjectKind::kView) {
+    if (object.kind == ObjectKind::kTable) {
+        LoadTable(object.name);
+    } else if (object.kind == ObjectKind::kView) {
         const std::string sql =
             "SELECT * FROM " + sqlite_manager::QuoteIdentifier(object.name);
         sql_entry_->set_text(sql);
-        RunSqlText(sql);
+        RunSqlText(sql);  // views are read-only
     } else {
+        edit_table_.clear();
         grid_->Clear();
         status_->set_text("Select a table or view to see its rows.");
     }
+}
+
+void MainWindow::LoadTable(const std::string& table) {
+    if (!session_) return;
+    const std::string quoted = sqlite_manager::QuoteIdentifier(table);
+    // rowid addresses the row for edits; hide it from the visible columns.
+    auto result = session_->RunQuery("SELECT rowid, * FROM " + quoted);
+    if (!result.ok()) {
+        // No rowid (e.g. a WITHOUT ROWID table): fall back to read-only.
+        RunSqlText("SELECT * FROM " + quoted);
+        return;
+    }
+
+    const auto& full = result.value();
+    sqlite_manager::QueryResult display;
+    std::vector<std::int64_t> rowids;
+    for (std::size_t i = 1; i < full.columns.size(); ++i) {
+        display.columns.push_back(full.columns[i]);
+    }
+    for (const auto& row : full.rows) {
+        rowids.push_back(row.empty() ? 0
+                                     : static_cast<std::int64_t>(std::strtoll(
+                                           row[0].text.c_str(), nullptr, 10)));
+        display.rows.emplace_back(row.begin() + 1, row.end());
+    }
+
+    edit_table_ = table;
+    sql_entry_->set_text("SELECT * FROM " + quoted);
+    grid_->SetEditableResult(display, std::move(rowids));
+    const auto rows = display.rows.size();
+    status_->set_text(std::to_string(rows) + (rows == 1 ? " row" : " rows") +
+                      " · double-click a cell to edit");
 }
 
 void MainWindow::OnRunSql() { RunSqlText(sql_entry_->get_text().raw()); }
 
 void MainWindow::RunSqlText(const std::string& sql) {
     if (!session_) return;
+    edit_table_.clear();  // an arbitrary query result is not editable
     auto result = session_->RunQuery(sql);
     if (!result.ok()) {
         grid_->Clear();
@@ -140,6 +186,20 @@ void MainWindow::RunSqlText(const std::string& sql) {
     grid_->SetResult(result.value());
     const auto rows = result.value().rows.size();
     status_->set_text(std::to_string(rows) + (rows == 1 ? " row" : " rows"));
+}
+
+bool MainWindow::OnCellEdited(std::int64_t rowid, const std::string& column,
+                              const std::string& new_text) {
+    if (!session_ || edit_table_.empty()) return false;
+    const sqlite_manager::Cell value{sqlite_manager::ValueType::kText,
+                                     new_text};
+    auto status = session_->UpdateCell(edit_table_, rowid, column, value);
+    if (!status.ok()) {
+        status_->set_text("Update failed: " + status.error().message);
+        return false;
+    }
+    status_->set_text("Updated.");
+    return true;
 }
 
 void MainWindow::ReportError(const Glib::ustring& message) {
