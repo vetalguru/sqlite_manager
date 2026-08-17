@@ -3,7 +3,8 @@ add_library(sqlite_manager STATIC
     error.cpp
     connection.cpp
     statement.cpp
-    transaction.cpp)
+    transaction.cpp
+    result_writer.cpp)
 
 # Library version: MAJOR.MINOR from project(VERSION); PATCH counts
 # commits to src/ and include/ since the last "lib-v*" tag.

@@ -8,10 +8,11 @@
 #include "arg_parser.h"
 #include "line_reader.h"
 #include "repl.h"
-#include "result_view.h"
 #include "sql_executor.h"
 #include "sqlite_manager/connection.h"
+#include "sqlite_manager/result_writer.h"
 #include "sqlite_manager/version.h"
+#include "table_view.h"
 
 namespace sqlite_manager_cli {
 
@@ -76,15 +77,15 @@ int CliApplication::Run(int argc, char** argv) {
     }
 
     TableView table_view;
-    CsvView csv_view;
-    JsonView json_view;
-    const ResultView* view = nullptr;
+    sqlite_manager::CsvWriter csv_writer;
+    sqlite_manager::JsonWriter json_writer;
+    const sqlite_manager::ResultWriter* writer = nullptr;
     if (format == "table") {
-        view = &table_view;
+        writer = &table_view;
     } else if (format == "csv") {
-        view = &csv_view;
+        writer = &csv_writer;
     } else if (format == "json") {
-        view = &json_view;
+        writer = &json_writer;
     } else {
         err_ << "Unknown format: " << format
              << " (expected table, csv, or json)\n";
@@ -102,18 +103,18 @@ int CliApplication::Run(int argc, char** argv) {
     }
 
     if (positional.size() == 2) {
-        return ExecuteSql(conn, positional[1], *view, out_, err_);
+        return ExecuteSql(conn, positional[1], *writer, out_, err_);
     }
 
     // Real terminal session: use line editing with history. isocline
     // detects non-TTY stdin itself and degrades to plain reads.
     if (&in_ == &std::cin && !batch) {
         IsoclineLineReader reader;
-        Repl repl(conn, reader, *view, out_, err_);
+        Repl repl(conn, reader, *writer, out_, err_);
         return repl.Run();
     }
     StreamLineReader reader(in_, out_, !batch);
-    Repl repl(conn, reader, *view, out_, err_);
+    Repl repl(conn, reader, *writer, out_, err_);
     return repl.Run();
 }
 

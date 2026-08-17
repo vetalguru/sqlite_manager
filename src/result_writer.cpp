@@ -1,23 +1,14 @@
-#include "result_view.h"
+#include "sqlite_manager/result_writer.h"
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdio>
 #include <ostream>
 #include <string>
-#include <vector>
 
-#include "query_result.h"
-
-namespace sqlite_manager_cli {
+namespace sqlite_manager {
 
 namespace {
-
-// How a cell is shown in a table: its text, or "NULL" for SQL NULL.
-std::string TableCell(const Cell& cell) {
-    return cell.type == ValueType::kNull ? std::string("NULL") : cell.text;
-}
 
 // RFC 4180 field: quote it when it contains a comma, double quote, CR or
 // LF; escape embedded quotes by doubling them.
@@ -77,52 +68,7 @@ std::string JsonString(const std::string& value) {
 
 }  // namespace
 
-void TableView::Render(const QueryResult& result, std::ostream& out) const {
-    const std::size_t columns = result.columns.size();
-
-    // Each column is as wide as the widest of its header and its cells.
-    std::vector<std::size_t> width(columns, 0);
-    for (std::size_t i = 0; i < columns; ++i) {
-        width[i] = result.columns[i].size();
-    }
-    for (const auto& row : result.rows) {
-        for (std::size_t i = 0; i < row.size(); ++i) {
-            width[i] = std::max(width[i], TableCell(row[i]).size());
-        }
-    }
-
-    // "+----+---------+"
-    auto frame = [&]() {
-        for (const std::size_t w : width) {
-            out << '+' << std::string(w + 2, '-');
-        }
-        out << "+\n";
-    };
-
-    // "| 1  | M855    |"
-    auto print_cells = [&](const std::vector<std::string>& cells) {
-        for (std::size_t i = 0; i < columns; ++i) {
-            out << "| " << cells[i]
-                << std::string(width[i] - cells[i].size(), ' ') << ' ';
-        }
-        out << "|\n";
-    };
-
-    frame();
-    print_cells(result.columns);
-    frame();
-
-    std::vector<std::string> cells(columns);
-    for (const auto& row : result.rows) {
-        for (std::size_t i = 0; i < columns; ++i) {
-            cells[i] = TableCell(row[i]);
-        }
-        print_cells(cells);
-    }
-    frame();
-}
-
-void CsvView::Render(const QueryResult& result, std::ostream& out) const {
+void CsvWriter::Write(const QueryResult& result, std::ostream& out) const {
     const std::size_t columns = result.columns.size();
 
     for (std::size_t i = 0; i < columns; ++i) {
@@ -143,7 +89,7 @@ void CsvView::Render(const QueryResult& result, std::ostream& out) const {
     }
 }
 
-void JsonView::Render(const QueryResult& result, std::ostream& out) const {
+void JsonWriter::Write(const QueryResult& result, std::ostream& out) const {
     const std::size_t columns = result.columns.size();
 
     out << '[';
@@ -174,4 +120,4 @@ void JsonView::Render(const QueryResult& result, std::ostream& out) const {
     out << (result.rows.empty() ? "]\n" : "\n]\n");
 }
 
-}  // namespace sqlite_manager_cli
+}  // namespace sqlite_manager

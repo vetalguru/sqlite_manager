@@ -5,24 +5,27 @@
 #include <utility>
 #include <vector>
 
-#include "query_result.h"
-#include "result_view.h"
 #include "sqlite_manager/connection.h"
+#include "sqlite_manager/query_result.h"
+#include "sqlite_manager/result_writer.h"
 #include "sqlite_manager/statement.h"
 
 namespace sqlite_manager_cli {
 
 namespace {
 
+using sqlite_manager::Cell;
 using sqlite_manager::Connection;
+using sqlite_manager::QueryResult;
+using sqlite_manager::ResultWriter;
 using sqlite_manager::Statement;
 using sqlite_manager::ValueType;
 
 // Steps a query to completion, collecting its columns and rows into the
-// model, then renders it through `view`. Each cell records its storage
-// type and (for non-NULL values) its display text, so the view can
+// model, then renders it through `writer`. Each cell records its storage
+// type and (for non-NULL values) its display text, so the writer can
 // render faithfully. Returns exit code.
-int RunQuery(Statement& stmt, const ResultView& view, std::ostream& out,
+int RunQuery(Statement& stmt, const ResultWriter& writer, std::ostream& out,
              std::ostream& err) {
     const int columns = stmt.ColumnCount();
 
@@ -53,20 +56,21 @@ int RunQuery(Statement& stmt, const ResultView& view, std::ostream& out,
         result.rows.push_back(std::move(row));
     }
 
-    view.Render(result, out);
+    writer.Write(result, out);
     return 0;
 }
 
 }  // namespace
 
-int ExecuteSql(Connection& conn, const std::string& sql, const ResultView& view,
-               std::ostream& out, std::ostream& err) {
+int ExecuteSql(Connection& conn, const std::string& sql,
+               const ResultWriter& writer, std::ostream& out,
+               std::ostream& err) {
     // Single statements go through Statement so result rows can be
     // rendered; batches fail Prepare and fall back to Execute.
     auto stmt = Statement::Prepare(conn, sql);
     if (stmt.ok()) {
         if (stmt.value().ColumnCount() > 0) {
-            return RunQuery(stmt.value(), view, out, err);
+            return RunQuery(stmt.value(), writer, out, err);
         }
         if (auto step = stmt.value().Step(); !step.ok()) {
             err << "Error: " << step.error().message << "\n";
