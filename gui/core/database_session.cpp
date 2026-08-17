@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "gui/core/csv_importer.h"
 #include "gui/core/query_runner.h"
 #include "gui/core/row_editor.h"
 #include "gui/core/schema_reader.h"
@@ -54,6 +55,12 @@ Result<std::int64_t> DatabaseSession::InsertRow(
     const std::string& table,
     const std::vector<std::pair<std::string, sqlite_manager::Cell>>& values) {
     return sqlite_manager_gui::InsertRow(conn_, table, values);
+}
+
+Result<int> DatabaseSession::ImportCsv(const std::string& table,
+                                       const std::string& text,
+                                       bool has_header) {
+    return sqlite_manager_gui::ImportCsv(conn_, table, text, has_header);
 }
 
 }  // namespace sqlite_manager_gui
