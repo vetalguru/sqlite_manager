@@ -45,6 +45,7 @@ endfunction()
 add_subdirectory(third_party)
 add_subdirectory(src)
 add_subdirectory(cli)
+add_subdirectory(gui)
 
 # Tests only when built as the top-level project
 if(PROJECT_IS_TOP_LEVEL)
@@ -60,6 +61,7 @@ if(PROJECT_IS_TOP_LEVEL AND CLANG_TIDY_EXE)
     file(GLOB lint_sources CONFIGURE_DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/cli/*.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/gui/core/*.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp)
     add_custom_target(lint
         COMMAND ${CLANG_TIDY_EXE} -p ${CMAKE_BINARY_DIR}
