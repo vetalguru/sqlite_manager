@@ -15,6 +15,12 @@ namespace sqlite_manager {
 // mis-splits triggers and semicolons inside strings.
 bool IsCompleteStatement(const std::string& sql);
 
+// Quotes `name` as a SQLite identifier: wraps it in double quotes and
+// doubles any embedded double quote. Use it to build SQL that references
+// a table or column whose name may contain special characters, keywords,
+// or quotes - never string-concatenate a raw identifier.
+std::string QuoteIdentifier(const std::string& name);
+
 }  // namespace sqlite_manager
 
 #endif  // SQLITE_MANAGER_SQL_UTIL_H

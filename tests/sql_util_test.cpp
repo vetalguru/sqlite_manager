@@ -37,5 +37,12 @@ TEST(SqlUtilTest, TriggerBodyIsCompleteOnlyAfterEnd) {
         "CREATE TRIGGER t AFTER UPDATE ON x BEGIN UPDATE x SET y = 1; END;"));
 }
 
+TEST(SqlUtilTest, QuoteIdentifierWrapsAndEscapes) {
+    EXPECT_EQ(QuoteIdentifier("users"), "\"users\"");
+    EXPECT_EQ(QuoteIdentifier("weird name"), "\"weird name\"");
+    EXPECT_EQ(QuoteIdentifier("a\"b"), "\"a\"\"b\"");
+    EXPECT_EQ(QuoteIdentifier(""), "\"\"");
+}
+
 }  // namespace
 }  // namespace sqlite_manager

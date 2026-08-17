@@ -8,15 +8,21 @@
 #include <string>
 
 #include "gui/core/database_session.h"
+#include "gui/core/schema_info.h"
+
+namespace Gtk {
+class Entry;
+class Label;
+}  // namespace Gtk
 
 namespace sqlite_manager_gui::gtk {
 
 class SchemaSidebar;
+class ResultGrid;
 
 // The application's main window: a header bar with an "Open" action, a
-// schema sidebar, and (for now) a placeholder body. It owns the open
-// DatabaseSession and drives the views; the SQL editor and result grid
-// are layered into the body in later changes.
+// schema sidebar, and a query panel (SQL entry + result grid). It owns
+// the open DatabaseSession and wires the views to the core.
 class MainWindow : public Gtk::ApplicationWindow {
 public:
     MainWindow();
@@ -25,10 +31,16 @@ private:
     void OnOpenClicked();
     void OpenDatabase(const std::string& path);
     void RefreshSchema();
+    void OnObjectSelected(const ObjectInfo& object);
+    void OnRunSql();
+    void RunSqlText(const std::string& sql);
     void ReportError(const Glib::ustring& message);
 
     std::optional<DatabaseSession> session_;
     SchemaSidebar* sidebar_ = nullptr;  // owned by the widget tree
+    ResultGrid* grid_ = nullptr;
+    Gtk::Entry* sql_entry_ = nullptr;
+    Gtk::Label* status_ = nullptr;
 };
 
 }  // namespace sqlite_manager_gui::gtk
