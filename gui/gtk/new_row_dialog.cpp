@@ -57,6 +57,10 @@ NewRowDialog::NewRowDialog(Gtk::Window& parent, const std::string& table,
     scroller->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     scroller->set_child(*grid);
     scroller->set_vexpand(true);
+    // Size to the form's natural height (all fields visible) and only
+    // scroll once there are many columns.
+    scroller->set_propagate_natural_height(true);
+    scroller->set_max_content_height(500);
 
     error_ = Gtk::make_managed<Gtk::Label>();
     error_->set_halign(Gtk::Align::START);
