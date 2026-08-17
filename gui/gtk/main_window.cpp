@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "gui/gtk/new_row_dialog.h"
 #include "gui/gtk/result_grid.h"
 #include "gui/gtk/schema_sidebar.h"
 #include "sqlite_manager/query_result.h"
@@ -256,13 +257,28 @@ bool MainWindow::OnCellEdited(std::int64_t rowid, const std::string& column,
 
 void MainWindow::OnAddRow() {
     if (!session_ || edit_table_.empty()) return;
-    auto rowid = session_->InsertRow(edit_table_, {});
-    if (!rowid.ok()) {
-        status_->set_text("Add failed: " + rowid.error().message);
+    auto info = session_->DescribeTable(edit_table_);
+    if (!info.ok()) {
+        ReportError("Cannot read columns:\n" + info.error().message);
         return;
     }
-    ReloadTable();
-    status_->set_text("Row added.");
+
+    // The dialog collects values; this callback performs the insert and
+    // reports success/failure back so the dialog can stay open on error.
+    auto* dialog = new NewRowDialog(
+        *this, edit_table_, info.value().columns,
+        [this](const std::vector<std::pair<std::string, sqlite_manager::Cell>>&
+                   values) -> std::optional<Glib::ustring> {
+            auto inserted = session_->InsertRow(edit_table_, values);
+            if (!inserted.ok()) {
+                return Glib::ustring(inserted.error().message);
+            }
+            ReloadTable();
+            status_->set_text("Row added.");
+            return std::nullopt;
+        });
+    dialog->signal_hide().connect([dialog]() { delete dialog; });
+    dialog->present();
 }
 
 void MainWindow::OnDeleteRow() {

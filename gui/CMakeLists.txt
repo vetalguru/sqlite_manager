@@ -37,7 +37,8 @@ if(SQLITE_MANAGER_BUILD_GUI)
         gtk/application.cpp
         gtk/main_window.cpp
         gtk/schema_sidebar.cpp
-        gtk/result_grid.cpp)
+        gtk/result_grid.cpp
+        gtk/new_row_dialog.cpp)
 
     target_include_directories(sqlite-manager-gui PRIVATE ${PROJECT_SOURCE_DIR})
 
