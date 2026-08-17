@@ -33,7 +33,8 @@ if(SQLITE_MANAGER_BUILD_GUI)
     add_executable(sqlite-manager-gui
         gtk/main.cpp
         gtk/application.cpp
-        gtk/main_window.cpp)
+        gtk/main_window.cpp
+        gtk/schema_sidebar.cpp)
 
     target_include_directories(sqlite-manager-gui PRIVATE ${PROJECT_SOURCE_DIR})
 
