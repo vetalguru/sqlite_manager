@@ -10,6 +10,7 @@
 
 #include "gui/core/database_session.h"
 #include "gui/core/schema_info.h"
+#include "sqlite_manager/query_result.h"
 #include "sqlite_manager/transaction.h"
 
 namespace Gtk {
@@ -46,6 +47,8 @@ private:
     void OnBeginTransaction();
     void OnCommitTransaction();
     void OnRollbackTransaction();
+    void OnExport();
+    void ExportTo(const std::string& path);
     void UpdateActions();
     void ReportError(const Glib::ustring& message);
 
@@ -60,7 +63,9 @@ private:
     Gtk::Button* begin_button_ = nullptr;
     Gtk::Button* commit_button_ = nullptr;
     Gtk::Button* rollback_button_ = nullptr;
+    Gtk::Button* export_button_ = nullptr;
     std::string edit_table_;  // table backing an editable grid; empty if none
+    sqlite_manager::QueryResult last_result_;  // what the grid shows now
 };
 
 }  // namespace sqlite_manager_gui::gtk

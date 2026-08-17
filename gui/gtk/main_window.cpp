@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,6 +26,7 @@
 #include "gui/gtk/result_grid.h"
 #include "gui/gtk/schema_sidebar.h"
 #include "sqlite_manager/query_result.h"
+#include "sqlite_manager/result_writer.h"
 #include "sqlite_manager/sql_util.h"
 
 namespace sqlite_manager_gui::gtk {
@@ -38,6 +40,10 @@ MainWindow::MainWindow() {
     open_button->signal_clicked().connect(
         sigc::mem_fun(*this, &MainWindow::OnOpenClicked));
     header->pack_start(*open_button);
+    export_button_ = Gtk::make_managed<Gtk::Button>("Export…");
+    export_button_->signal_clicked().connect(
+        sigc::mem_fun(*this, &MainWindow::OnExport));
+    header->pack_end(*export_button_);
     set_titlebar(*header);
 
     sidebar_ = Gtk::make_managed<SchemaSidebar>();
@@ -141,6 +147,7 @@ void MainWindow::OpenDatabase(const std::string& path) {
     }
     txn_.reset();  // abandon any transaction on the previous connection
     edit_table_.clear();
+    last_result_ = {};
     session_.emplace(std::move(opened).value());
     set_title("SQLite Manager — " + Glib::path_get_basename(path));
     grid_->Clear();
@@ -170,6 +177,7 @@ void MainWindow::OnObjectSelected(const ObjectInfo& object) {
         RunSqlText(sql);  // views are read-only
     } else {
         edit_table_.clear();
+        last_result_ = {};
         grid_->Clear();
         status_->set_text("Select a table or view to see its rows.");
         UpdateActions();
@@ -201,6 +209,7 @@ void MainWindow::LoadTable(const std::string& table) {
     }
 
     edit_table_ = table;
+    last_result_ = display;
     sql_entry_->set_text("SELECT * FROM " + quoted);
     grid_->SetEditableResult(display, std::move(rowids));
     const auto rows = display.rows.size();
@@ -224,6 +233,7 @@ void MainWindow::RunSqlText(const std::string& sql) {
         status_->set_text("Error: " + result.error().message);
         return;
     }
+    last_result_ = result.value();
     grid_->SetResult(result.value());
     const auto rows = result.value().rows.size();
     status_->set_text(std::to_string(rows) + (rows == 1 ? " row" : " rows"));
@@ -309,6 +319,42 @@ void MainWindow::OnRollbackTransaction() {
     UpdateActions();
 }
 
+void MainWindow::OnExport() {
+    if (last_result_.columns.empty()) {
+        status_->set_text("Nothing to export.");
+        return;
+    }
+    auto dialog = Gtk::FileDialog::create();
+    dialog->set_title("Export Result");
+    dialog->set_initial_name("result.csv");
+    dialog->save(*this,
+                 [this, dialog](const Glib::RefPtr<Gio::AsyncResult>& result) {
+                     try {
+                         auto file = dialog->save_finish(result);
+                         if (file) ExportTo(file->get_path());
+                     } catch (const Glib::Error&) {
+                         // Dialog dismissed or failed; nothing to write.
+                     }
+                 });
+}
+
+void MainWindow::ExportTo(const std::string& path) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        status_->set_text("Cannot write: " + path);
+        return;
+    }
+    // Choose the format by extension; CSV is the default.
+    const bool json =
+        path.size() >= 5 && path.compare(path.size() - 5, 5, ".json") == 0;
+    if (json) {
+        sqlite_manager::JsonWriter().Write(last_result_, out);
+    } else {
+        sqlite_manager::CsvWriter().Write(last_result_, out);
+    }
+    status_->set_text("Exported to " + Glib::path_get_basename(path));
+}
+
 void MainWindow::UpdateActions() {
     const bool has_session = session_.has_value();
     const bool editable = has_session && !edit_table_.empty();
@@ -318,6 +364,7 @@ void MainWindow::UpdateActions() {
     begin_button_->set_sensitive(has_session && !in_txn);
     commit_button_->set_sensitive(in_txn);
     rollback_button_->set_sensitive(in_txn);
+    export_button_->set_sensitive(!last_result_.columns.empty());
 }
 
 void MainWindow::ReportError(const Glib::ustring& message) {
