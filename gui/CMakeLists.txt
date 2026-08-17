@@ -6,7 +6,8 @@
 add_library(sqlite_manager_gui_core STATIC
     core/query_runner.cpp
     core/schema_reader.cpp
-    core/database_session.cpp)
+    core/database_session.cpp
+    core/row_editor.cpp)
 
 target_include_directories(sqlite_manager_gui_core PUBLIC
     ${PROJECT_SOURCE_DIR})
