@@ -22,6 +22,7 @@ add_executable(sqlite_manager_tests
     connection_test.cpp
     statement_test.cpp
     transaction_test.cpp
+    sql_util_test.cpp
     arg_parser_test.cpp
     result_writer_test.cpp
     table_view_test.cpp

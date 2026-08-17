@@ -9,20 +9,15 @@
 #include "line_reader.h"
 #include "sql_executor.h"
 #include "sqlite_manager/connection.h"
+#include "sqlite_manager/sql_util.h"
 #include "sqlite_manager/statement.h"
 
 namespace sqlite_manager_cli {
 
 namespace {
 
+using sqlite_manager::IsCompleteStatement;
 using sqlite_manager::Statement;
-
-// True if the accumulated buffer forms a complete SQL input:
-// its last non-whitespace character is a semicolon.
-bool IsCompleteSql(const std::string& buffer) {
-    const auto last = buffer.find_last_not_of(" \t\r\n");
-    return last != std::string::npos && buffer[last] == ';';
-}
 
 // Trims leading and trailing whitespace.
 std::string Trim(const std::string& text) {
@@ -140,7 +135,7 @@ void Repl::ExecuteScript(const std::string& script) {
     while (std::getline(in, line)) {
         buffer += line;
         buffer += '\n';
-        if (IsCompleteSql(buffer)) {
+        if (IsCompleteStatement(buffer)) {
             ExecuteSql(conn_, buffer, writer_, out_, err_);
             buffer.clear();
         }
@@ -173,7 +168,7 @@ int Repl::Run() {
         buffer += *line;
         buffer += '\n';
 
-        if (IsCompleteSql(buffer)) {
+        if (IsCompleteStatement(buffer)) {
             ExecuteSql(conn_, buffer, writer_, out_, err_);
             buffer.clear();
         } else if (Trim(buffer).empty()) {
