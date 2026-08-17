@@ -31,7 +31,8 @@ add_executable(sqlite_manager_tests
     schema_reader_test.cpp
     database_session_test.cpp
     row_editor_test.cpp
-    csv_importer_test.cpp)
+    csv_importer_test.cpp
+    schema_editor_test.cpp)
 
 target_link_libraries(sqlite_manager_tests
     PRIVATE

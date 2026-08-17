@@ -8,6 +8,7 @@
 #include "gui/core/csv_importer.h"
 #include "gui/core/query_runner.h"
 #include "gui/core/row_editor.h"
+#include "gui/core/schema_editor.h"
 #include "gui/core/schema_reader.h"
 
 namespace sqlite_manager_gui {
@@ -61,6 +62,26 @@ Result<int> DatabaseSession::ImportCsv(const std::string& table,
                                        const std::string& text,
                                        bool has_header) {
     return sqlite_manager_gui::ImportCsv(conn_, table, text, has_header);
+}
+
+Status DatabaseSession::AddColumn(const std::string& table,
+                                  const std::string& name,
+                                  const std::string& type) {
+    return sqlite_manager_gui::AddColumn(conn_, table, name, type);
+}
+
+Status DatabaseSession::DropColumn(const std::string& table,
+                                   const std::string& name) {
+    return sqlite_manager_gui::DropColumn(conn_, table, name);
+}
+
+Status DatabaseSession::CreateTable(const std::string& name,
+                                    const std::vector<ColumnDef>& columns) {
+    return sqlite_manager_gui::CreateTable(conn_, name, columns);
+}
+
+Status DatabaseSession::DropTable(const std::string& name) {
+    return sqlite_manager_gui::DropTable(conn_, name);
 }
 
 }  // namespace sqlite_manager_gui
