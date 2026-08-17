@@ -1,8 +1,12 @@
 #include "gui/core/database_session.h"
 
+#include <cstdint>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "gui/core/query_runner.h"
+#include "gui/core/row_editor.h"
 #include "gui/core/schema_reader.h"
 
 namespace sqlite_manager_gui {
@@ -33,6 +37,23 @@ Result<QueryResult> DatabaseSession::RunQuery(const std::string& sql) {
 
 Status DatabaseSession::Execute(const std::string& sql) {
     return conn_.Execute(sql);
+}
+
+Status DatabaseSession::UpdateCell(const std::string& table, std::int64_t rowid,
+                                   const std::string& column,
+                                   const sqlite_manager::Cell& value) {
+    return sqlite_manager_gui::UpdateCell(conn_, table, rowid, column, value);
+}
+
+Status DatabaseSession::DeleteRow(const std::string& table,
+                                  std::int64_t rowid) {
+    return sqlite_manager_gui::DeleteRow(conn_, table, rowid);
+}
+
+Result<std::int64_t> DatabaseSession::InsertRow(
+    const std::string& table,
+    const std::vector<std::pair<std::string, sqlite_manager::Cell>>& values) {
+    return sqlite_manager_gui::InsertRow(conn_, table, values);
 }
 
 }  // namespace sqlite_manager_gui

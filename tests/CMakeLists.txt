@@ -29,7 +29,8 @@ add_executable(sqlite_manager_tests
     cli_application_test.cpp
     query_runner_test.cpp
     schema_reader_test.cpp
-    database_session_test.cpp)
+    database_session_test.cpp
+    row_editor_test.cpp)
 
 target_link_libraries(sqlite_manager_tests
     PRIVATE

@@ -1,6 +1,7 @@
 #ifndef SQLITE_MANAGER_GUI_CORE_DATABASE_SESSION_H
 #define SQLITE_MANAGER_GUI_CORE_DATABASE_SESSION_H
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -40,6 +41,20 @@ public:
     sqlite_manager::Result<sqlite_manager::QueryResult> RunQuery(
         const std::string& sql);
     sqlite_manager::Status Execute(const std::string& sql);
+
+    // --- Single-row editing (by rowid) ---
+    // For editing a real table's rows - the ones "SELECT rowid, * FROM t"
+    // exposes. Table and column names are quoted and values are bound.
+    sqlite_manager::Status UpdateCell(const std::string& table,
+                                      std::int64_t rowid,
+                                      const std::string& column,
+                                      const sqlite_manager::Cell& value);
+    sqlite_manager::Status DeleteRow(const std::string& table,
+                                     std::int64_t rowid);
+    sqlite_manager::Result<std::int64_t> InsertRow(
+        const std::string& table,
+        const std::vector<std::pair<std::string, sqlite_manager::Cell>>&
+            values);
 
     // Escape hatch for advanced flows (transactions, backups, custom SQL).
     sqlite_manager::Connection& connection() { return conn_; }
