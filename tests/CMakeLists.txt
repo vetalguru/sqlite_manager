@@ -25,12 +25,16 @@ add_executable(sqlite_manager_tests
     arg_parser_test.cpp
     result_writer_test.cpp
     table_view_test.cpp
-    cli_application_test.cpp)
+    cli_application_test.cpp
+    query_runner_test.cpp
+    schema_reader_test.cpp
+    database_session_test.cpp)
 
 target_link_libraries(sqlite_manager_tests
     PRIVATE
         sqlite_manager
         sqlite_manager_cli_lib
+        sqlite_manager_gui_core
         sqlite_manager_warnings
         GTest::gtest_main)
 
