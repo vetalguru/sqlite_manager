@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "gui/core/schema_editor.h"
 #include "gui/core/schema_info.h"
 #include "sqlite_manager/connection.h"
 #include "sqlite_manager/query_result.h"
@@ -61,6 +62,16 @@ public:
     sqlite_manager::Result<int> ImportCsv(const std::string& table,
                                           const std::string& text,
                                           bool has_header);
+
+    // --- Schema editing (DDL, see gui/core/schema_editor.h) ---
+    sqlite_manager::Status AddColumn(const std::string& table,
+                                     const std::string& name,
+                                     const std::string& type);
+    sqlite_manager::Status DropColumn(const std::string& table,
+                                      const std::string& name);
+    sqlite_manager::Status CreateTable(const std::string& name,
+                                       const std::vector<ColumnDef>& columns);
+    sqlite_manager::Status DropTable(const std::string& name);
 
     // Escape hatch for advanced flows (transactions, backups, custom SQL).
     sqlite_manager::Connection& connection() { return conn_; }
