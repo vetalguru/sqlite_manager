@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -177,6 +178,16 @@ void ResultGrid::Populate(const sqlite_manager::QueryResult& result,
         if (editable) column->set_expand(true);
         view_->append_column(column);
     }
+}
+
+std::optional<std::int64_t> ResultGrid::selected_rowid() const {
+    auto selection =
+        std::dynamic_pointer_cast<Gtk::SingleSelection>(view_->get_model());
+    if (!selection) return std::nullopt;
+    auto row =
+        std::dynamic_pointer_cast<RowObject>(selection->get_selected_item());
+    if (!row) return std::nullopt;
+    return row->rowid();
 }
 
 void ResultGrid::Clear() {

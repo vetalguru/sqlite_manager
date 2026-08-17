@@ -13,6 +13,7 @@
 #include <gtkmm/headerbar.h>
 #include <gtkmm/label.h>
 #include <gtkmm/paned.h>
+#include <gtkmm/separator.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -69,12 +70,41 @@ MainWindow::MainWindow() {
         return OnCellEdited(rowid, column, new_text);
     });
 
+    // Row and transaction actions.
+    add_button_ = Gtk::make_managed<Gtk::Button>("Add Row");
+    add_button_->signal_clicked().connect(
+        sigc::mem_fun(*this, &MainWindow::OnAddRow));
+    delete_button_ = Gtk::make_managed<Gtk::Button>("Delete Row");
+    delete_button_->signal_clicked().connect(
+        sigc::mem_fun(*this, &MainWindow::OnDeleteRow));
+    begin_button_ = Gtk::make_managed<Gtk::Button>("Begin");
+    begin_button_->signal_clicked().connect(
+        sigc::mem_fun(*this, &MainWindow::OnBeginTransaction));
+    commit_button_ = Gtk::make_managed<Gtk::Button>("Commit");
+    commit_button_->signal_clicked().connect(
+        sigc::mem_fun(*this, &MainWindow::OnCommitTransaction));
+    rollback_button_ = Gtk::make_managed<Gtk::Button>("Rollback");
+    rollback_button_->signal_clicked().connect(
+        sigc::mem_fun(*this, &MainWindow::OnRollbackTransaction));
+
+    auto* toolbar = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    toolbar->set_spacing(6);
+    toolbar->set_margin(6);
+    toolbar->append(*add_button_);
+    toolbar->append(*delete_button_);
+    toolbar->append(
+        *Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL));
+    toolbar->append(*begin_button_);
+    toolbar->append(*commit_button_);
+    toolbar->append(*rollback_button_);
+
     status_ = Gtk::make_managed<Gtk::Label>("Open a database to begin.");
     status_->set_halign(Gtk::Align::START);
     status_->set_margin(6);
 
     auto* right = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
     right->append(*query_row);
+    right->append(*toolbar);
     right->append(*grid_);
     right->append(*status_);
 
@@ -85,6 +115,8 @@ MainWindow::MainWindow() {
     paned->set_shrink_start_child(false);
     paned->set_position(260);
     set_child(*paned);
+
+    UpdateActions();
 }
 
 void MainWindow::OnOpenClicked() {
@@ -107,11 +139,14 @@ void MainWindow::OpenDatabase(const std::string& path) {
         ReportError("Cannot open database:\n" + opened.error().message);
         return;
     }
+    txn_.reset();  // abandon any transaction on the previous connection
+    edit_table_.clear();
     session_.emplace(std::move(opened).value());
     set_title("SQLite Manager — " + Glib::path_get_basename(path));
     grid_->Clear();
     status_->set_text("Select a table or view, or enter SQL.");
     RefreshSchema();
+    UpdateActions();
 }
 
 void MainWindow::RefreshSchema() {
@@ -137,6 +172,7 @@ void MainWindow::OnObjectSelected(const ObjectInfo& object) {
         edit_table_.clear();
         grid_->Clear();
         status_->set_text("Select a table or view to see its rows.");
+        UpdateActions();
     }
 }
 
@@ -170,6 +206,11 @@ void MainWindow::LoadTable(const std::string& table) {
     const auto rows = display.rows.size();
     status_->set_text(std::to_string(rows) + (rows == 1 ? " row" : " rows") +
                       " · double-click a cell to edit");
+    UpdateActions();
+}
+
+void MainWindow::ReloadTable() {
+    if (!edit_table_.empty()) LoadTable(edit_table_);
 }
 
 void MainWindow::OnRunSql() { RunSqlText(sql_entry_->get_text().raw()); }
@@ -186,6 +227,7 @@ void MainWindow::RunSqlText(const std::string& sql) {
     grid_->SetResult(result.value());
     const auto rows = result.value().rows.size();
     status_->set_text(std::to_string(rows) + (rows == 1 ? " row" : " rows"));
+    UpdateActions();
 }
 
 bool MainWindow::OnCellEdited(std::int64_t rowid, const std::string& column,
@@ -200,6 +242,82 @@ bool MainWindow::OnCellEdited(std::int64_t rowid, const std::string& column,
     }
     status_->set_text("Updated.");
     return true;
+}
+
+void MainWindow::OnAddRow() {
+    if (!session_ || edit_table_.empty()) return;
+    auto rowid = session_->InsertRow(edit_table_, {});
+    if (!rowid.ok()) {
+        status_->set_text("Add failed: " + rowid.error().message);
+        return;
+    }
+    ReloadTable();
+    status_->set_text("Row added.");
+}
+
+void MainWindow::OnDeleteRow() {
+    if (!session_ || edit_table_.empty()) return;
+    auto rowid = grid_->selected_rowid();
+    if (!rowid) {
+        status_->set_text("Select a row to delete.");
+        return;
+    }
+    auto status = session_->DeleteRow(edit_table_, *rowid);
+    if (!status.ok()) {
+        status_->set_text("Delete failed: " + status.error().message);
+        return;
+    }
+    ReloadTable();
+    status_->set_text("Row deleted.");
+}
+
+void MainWindow::OnBeginTransaction() {
+    if (!session_ || txn_) return;
+    auto txn = sqlite_manager::Transaction::Begin(session_->connection());
+    if (!txn.ok()) {
+        status_->set_text("Begin failed: " + txn.error().message);
+        return;
+    }
+    txn_.emplace(std::move(txn).value());
+    status_->set_text("Transaction started.");
+    UpdateActions();
+}
+
+void MainWindow::OnCommitTransaction() {
+    if (!txn_) return;
+    auto status = txn_->Commit();
+    txn_.reset();
+    ReloadTable();
+    if (status.ok()) {
+        status_->set_text("Committed.");
+    } else {
+        status_->set_text("Commit failed: " + status.error().message);
+    }
+    UpdateActions();
+}
+
+void MainWindow::OnRollbackTransaction() {
+    if (!txn_) return;
+    auto status = txn_->Rollback();
+    txn_.reset();
+    ReloadTable();
+    if (status.ok()) {
+        status_->set_text("Rolled back.");
+    } else {
+        status_->set_text("Rollback failed: " + status.error().message);
+    }
+    UpdateActions();
+}
+
+void MainWindow::UpdateActions() {
+    const bool has_session = session_.has_value();
+    const bool editable = has_session && !edit_table_.empty();
+    const bool in_txn = txn_.has_value();
+    add_button_->set_sensitive(editable);
+    delete_button_->set_sensitive(editable);
+    begin_button_->set_sensitive(has_session && !in_txn);
+    commit_button_->set_sensitive(in_txn);
+    rollback_button_->set_sensitive(in_txn);
 }
 
 void MainWindow::ReportError(const Glib::ustring& message) {
