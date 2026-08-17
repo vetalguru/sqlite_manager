@@ -6,7 +6,14 @@ covering every SQLite storage class and many declared column types
 untyped, …), two views, several indexes, a trigger, and sample rows
 (including NULLs and blobs).
 
-Build it with the CLI (or `sqlite3`), from the repository root:
+The build generates `demo.db` from `demo.sql` automatically — the
+`demo-db` target is part of the default build — so after building you can
+open `examples/demo.db` directly. It is regenerated when `demo.sql`
+changes, and is git-ignored (a build artifact). Disable it with
+`-DSQLITE_MANAGER_BUILD_EXAMPLES=OFF`.
+
+To build it by hand instead (with the CLI or `sqlite3`), from the
+repository root:
 
 ```bash
 sqlite-manager --batch examples/demo.db < examples/demo.sql
@@ -18,5 +25,3 @@ Then open `examples/demo.db` in the GUI, or query it from the CLI:
 ```bash
 sqlite-manager examples/demo.db "SELECT * FROM order_summary"
 ```
-
-The generated `demo.db` is a build artifact and is not tracked in git.
