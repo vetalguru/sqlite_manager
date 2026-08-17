@@ -56,6 +56,12 @@ public:
         const std::vector<std::pair<std::string, sqlite_manager::Cell>>&
             values);
 
+    // Imports CSV `text` into `table` (see gui/core/csv_importer.h);
+    // returns the number of rows imported.
+    sqlite_manager::Result<int> ImportCsv(const std::string& table,
+                                          const std::string& text,
+                                          bool has_header);
+
     // Escape hatch for advanced flows (transactions, backups, custom SQL).
     sqlite_manager::Connection& connection() { return conn_; }
 
