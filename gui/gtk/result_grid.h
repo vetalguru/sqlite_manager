@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,10 @@ public:
     void set_edit_handler(EditHandler handler) {
         edit_handler_ = std::move(handler);
     }
+
+    // The rowid of the currently selected row, if a row is selected in an
+    // editable grid. Empty otherwise.
+    std::optional<std::int64_t> selected_rowid() const;
 
     // Empties the grid (no columns, no rows).
     void Clear();
