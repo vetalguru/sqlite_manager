@@ -47,10 +47,11 @@ add_subdirectory(src)
 add_subdirectory(cli)
 add_subdirectory(gui)
 
-# Tests only when built as the top-level project
+# Tests and examples only when built as the top-level project
 if(PROJECT_IS_TOP_LEVEL)
     enable_testing()
     add_subdirectory(tests)
+    add_subdirectory(examples)
 endif()
 
 # `cmake --build <build-dir> --target lint` runs clang-tidy over the
