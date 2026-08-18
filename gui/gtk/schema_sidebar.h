@@ -4,7 +4,6 @@
 #include <gtkmm/scrolledwindow.h>
 #include <sigc++/signal.h>
 
-#include <string>
 #include <vector>
 
 #include "gui/core/schema_info.h"
@@ -29,11 +28,6 @@ public:
 
     // Empties the list.
     void Clear();
-
-    // Selects the row for the object with this name, if present. Selecting
-    // emits signal_object_selected(); callers that drive this
-    // programmatically should guard against re-entrancy.
-    void SelectObject(const std::string& name);
 
     // Emitted when the user selects an object row.
     sigc::signal<void(const ObjectInfo&)> signal_object_selected() {

@@ -11,23 +11,25 @@
 
 #include "gui/core/database_session.h"
 #include "gui/core/schema_info.h"
-#include "sqlite_manager/query_result.h"
 #include "sqlite_manager/transaction.h"
 
 namespace Gtk {
 class Button;
 class Entry;
 class Label;
+class Notebook;
 }  // namespace Gtk
 
 namespace sqlite_manager_gui::gtk {
 
 class SchemaSidebar;
-class ResultGrid;
+class ResultTab;
 
 // The application's main window: a header bar with an "Open" action, a
-// schema sidebar, and a query panel (SQL entry + result grid). It owns
-// the open DatabaseSession and wires the views to the core.
+// schema sidebar, and a query panel (SQL entry + a notebook of result
+// tabs). It owns the open DatabaseSession and wires the views to the core.
+// Tables and views each open in their own tab; the toolbar and the shared
+// transaction act on the active tab.
 class MainWindow : public Gtk::ApplicationWindow {
 public:
     MainWindow();
@@ -43,18 +45,20 @@ private:
     void RefreshSchema();
     void OnObjectSelected(const ObjectInfo& object);
     void ShowObject(const ObjectInfo& object);
-    // Runs `on_proceed` after resolving any pending (dirty) transaction: it
-    // asks whether to save (commit), discard (rollback), or cancel. With no
-    // pending changes it runs `on_proceed` at once. `on_cancel`, if given,
-    // runs when the user cancels or the commit fails.
-    void ConfirmPending(std::function<void()> on_proceed,
-                        std::function<void()> on_cancel = {});
+
+    // Result tabs.
+    ResultTab* active_tab() const;
+    ResultTab* find_tab(const std::string& key) const;
+    ResultTab* add_tab(const std::string& key, const Glib::ustring& title);
+    void OnTabSwitched();
+    void LoadTableInto(ResultTab* tab, const std::string& table);
+    void LoadViewInto(ResultTab* tab, const std::string& name);
+    void ReloadTab(ResultTab* tab);
+
     void OnRunSql();
     void RunSqlText(const std::string& sql);
-    void LoadTable(const std::string& table);
-    void ReloadTable();
-    bool OnCellEdited(std::int64_t rowid, const std::string& column,
-                      const std::string& new_text);
+    bool OnCellEdited(const std::string& table, std::int64_t rowid,
+                      const std::string& column, const std::string& new_text);
     void OnAddRow();
     void OnDeleteRow();
     void OnAddColumn();
@@ -66,11 +70,17 @@ private:
     void ExportTo(const std::string& path);
     void UpdateActions();
     void ReportError(const Glib::ustring& message);
+    // Runs `on_proceed` after resolving any pending (dirty) transaction: it
+    // asks whether to save (commit), discard (rollback), or cancel. With no
+    // pending changes it runs `on_proceed` at once. `on_cancel`, if given,
+    // runs when the user cancels or the commit fails.
+    void ConfirmPending(std::function<void()> on_proceed,
+                        std::function<void()> on_cancel = {});
 
     std::optional<DatabaseSession> session_;
     std::optional<sqlite_manager::Transaction> txn_;
     SchemaSidebar* sidebar_ = nullptr;  // owned by the widget tree
-    ResultGrid* grid_ = nullptr;
+    Gtk::Notebook* notebook_ = nullptr;
     Gtk::Entry* sql_entry_ = nullptr;
     Gtk::Label* status_ = nullptr;
     Gtk::Button* add_button_ = nullptr;
@@ -81,10 +91,7 @@ private:
     Gtk::Button* commit_button_ = nullptr;
     Gtk::Button* rollback_button_ = nullptr;
     Gtk::Button* export_button_ = nullptr;
-    std::string edit_table_;  // table backing an editable grid; empty if none
-    sqlite_manager::QueryResult last_result_;  // what the grid shows now
     bool dirty_ = false;  // the open transaction has uncommitted edits
-    bool restoring_selection_ = false;  // re-selecting a row programmatically
 };
 
 }  // namespace sqlite_manager_gui::gtk
