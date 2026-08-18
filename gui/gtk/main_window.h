@@ -5,6 +5,7 @@
 #include <gtkmm/applicationwindow.h>
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -32,10 +33,22 @@ public:
     MainWindow();
 
 private:
+    // Blocks the window close while a dirty transaction is open, so the
+    // prompt can offer to commit, discard, or stay.
+    bool on_close_request() override;
+
     void OnOpenClicked();
     void OpenDatabase(const std::string& path);
+    void OpenDatabaseNow(const std::string& path);
     void RefreshSchema();
     void OnObjectSelected(const ObjectInfo& object);
+    void ShowObject(const ObjectInfo& object);
+    // Runs `on_proceed` after resolving any pending (dirty) transaction: it
+    // asks whether to save (commit), discard (rollback), or cancel. With no
+    // pending changes it runs `on_proceed` at once. `on_cancel`, if given,
+    // runs when the user cancels or the commit fails.
+    void ConfirmPending(std::function<void()> on_proceed,
+                        std::function<void()> on_cancel = {});
     void OnRunSql();
     void RunSqlText(const std::string& sql);
     void LoadTable(const std::string& table);
@@ -70,6 +83,8 @@ private:
     Gtk::Button* export_button_ = nullptr;
     std::string edit_table_;  // table backing an editable grid; empty if none
     sqlite_manager::QueryResult last_result_;  // what the grid shows now
+    bool dirty_ = false;  // the open transaction has uncommitted edits
+    bool restoring_selection_ = false;  // re-selecting a row programmatically
 };
 
 }  // namespace sqlite_manager_gui::gtk

@@ -152,12 +152,17 @@ void MainWindow::OnOpenClicked() {
 }
 
 void MainWindow::OpenDatabase(const std::string& path) {
+    ConfirmPending([this, path]() { OpenDatabaseNow(path); });
+}
+
+void MainWindow::OpenDatabaseNow(const std::string& path) {
     auto opened = DatabaseSession::Open(path);
     if (!opened.ok()) {
         ReportError("Cannot open database:\n" + opened.error().message);
         return;
     }
     txn_.reset();  // abandon any transaction on the previous connection
+    dirty_ = false;
     edit_table_.clear();
     last_result_ = {};
     session_.emplace(std::move(opened).value());
@@ -179,6 +184,19 @@ void MainWindow::RefreshSchema() {
 }
 
 void MainWindow::OnObjectSelected(const ObjectInfo& object) {
+    if (!session_ || restoring_selection_) return;
+    // Leaving the current table may abandon pending edits; confirm first.
+    // On cancel, restore the sidebar highlight to the current table.
+    ConfirmPending([this, object]() { ShowObject(object); },
+                   [this]() {
+                       if (edit_table_.empty()) return;
+                       restoring_selection_ = true;
+                       sidebar_->SelectObject(edit_table_);
+                       restoring_selection_ = false;
+                   });
+}
+
+void MainWindow::ShowObject(const ObjectInfo& object) {
     if (!session_) return;
     if (object.kind == ObjectKind::kTable) {
         LoadTable(object.name);
@@ -268,6 +286,7 @@ bool MainWindow::OnCellEdited(std::int64_t rowid, const std::string& column,
         status_->set_text("Update failed: " + status.error().message);
         return false;
     }
+    dirty_ = true;
     status_->set_text("Updated.");
     return true;
 }
@@ -290,6 +309,7 @@ void MainWindow::OnAddRow() {
             if (!inserted.ok()) {
                 return Glib::ustring(inserted.error().message);
             }
+            dirty_ = true;
             ReloadTable();
             status_->set_text("Row added.");
             return std::nullopt;
@@ -310,6 +330,7 @@ void MainWindow::OnDeleteRow() {
         status_->set_text("Delete failed: " + status.error().message);
         return;
     }
+    dirty_ = true;
     ReloadTable();
     status_->set_text("Row deleted.");
 }
@@ -322,6 +343,7 @@ void MainWindow::OnAddColumn() {
                const std::string& type) -> std::optional<Glib::ustring> {
             auto status = session_->AddColumn(edit_table_, name, type);
             if (!status.ok()) return Glib::ustring(status.error().message);
+            dirty_ = true;
             ReloadTable();
             RefreshSchema();
             status_->set_text("Column \"" + name + "\" added.");
@@ -352,6 +374,7 @@ void MainWindow::OnDropColumn() {
         [this](const std::string& name) -> std::optional<Glib::ustring> {
             auto status = session_->DropColumn(edit_table_, name);
             if (!status.ok()) return Glib::ustring(status.error().message);
+            dirty_ = true;
             ReloadTable();
             RefreshSchema();
             status_->set_text("Column \"" + name + "\" dropped.");
@@ -369,6 +392,7 @@ void MainWindow::OnBeginTransaction() {
         return;
     }
     txn_.emplace(std::move(txn).value());
+    dirty_ = false;
     status_->set_text("Transaction started — edits are now enabled.");
     UpdateActions();
 }
@@ -377,6 +401,7 @@ void MainWindow::OnCommitTransaction() {
     if (!txn_) return;
     auto status = txn_->Commit();
     txn_.reset();
+    dirty_ = false;
     ReloadTable();
     if (status.ok()) {
         status_->set_text("Committed.");
@@ -390,6 +415,7 @@ void MainWindow::OnRollbackTransaction() {
     if (!txn_) return;
     auto status = txn_->Rollback();
     txn_.reset();
+    dirty_ = false;
     ReloadTable();
     if (status.ok()) {
         status_->set_text("Rolled back.");
@@ -456,6 +482,60 @@ void MainWindow::ReportError(const Glib::ustring& message) {
     auto dialog = Gtk::AlertDialog::create();
     dialog->set_message(message);
     dialog->show(*this);
+}
+
+void MainWindow::ConfirmPending(std::function<void()> on_proceed,
+                                std::function<void()> on_cancel) {
+    if (!txn_ || !dirty_) {
+        on_proceed();
+        return;
+    }
+
+    auto dialog = Gtk::AlertDialog::create();
+    dialog->set_modal(true);
+    dialog->set_message("Save changes before continuing?");
+    const std::string where =
+        edit_table_.empty() ? "The database" : "\"" + edit_table_ + "\"";
+    dialog->set_detail(where +
+                       " has uncommitted changes in the open transaction.");
+    dialog->set_buttons({"Cancel", "Discard", "Save"});
+    dialog->set_cancel_button(0);
+    dialog->set_default_button(2);
+    dialog->choose(*this, [this, dialog, on_proceed = std::move(on_proceed),
+                           on_cancel = std::move(on_cancel)](
+                              const Glib::RefPtr<Gio::AsyncResult>& result) {
+        int button = 0;
+        try {
+            button = dialog->choose_finish(result);
+        } catch (const Glib::Error&) {
+            button = 0;  // dismissed (Escape) counts as Cancel
+        }
+        if (button == 0) {  // Cancel: stay put
+            if (on_cancel) on_cancel();
+            return;
+        }
+        if (button == 2) {  // Save
+            auto status = txn_->Commit();
+            if (!status.ok()) {
+                status_->set_text("Commit failed: " + status.error().message);
+                if (on_cancel) on_cancel();
+                return;
+            }
+        } else {  // Discard
+            txn_->Rollback();
+        }
+        txn_.reset();
+        dirty_ = false;
+        UpdateActions();
+        on_proceed();
+    });
+}
+
+bool MainWindow::on_close_request() {
+    if (!txn_ || !dirty_) return false;  // nothing pending; allow the close
+    // Block this close and ask; on save or discard, re-issue the close.
+    ConfirmPending([this]() { close(); });
+    return true;
 }
 
 }  // namespace sqlite_manager_gui::gtk
