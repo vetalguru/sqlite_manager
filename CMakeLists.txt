@@ -18,6 +18,18 @@ add_library(sqlite_manager_warnings INTERFACE)
 target_compile_options(sqlite_manager_warnings INTERFACE
     -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 
+# Optional gcov/gcovr coverage instrumentation. It rides on the warnings
+# interface, which is linked to exactly our targets (never third_party),
+# so `--coverage` reaches all project code and the test executable without
+# editing each subdirectory's CMakeLists. See the `coverage` target below.
+option(SQLITE_MANAGER_COVERAGE "Instrument project code for coverage" OFF)
+add_library(sqlite_manager_coverage INTERFACE)
+if(SQLITE_MANAGER_COVERAGE)
+    target_compile_options(sqlite_manager_coverage INTERFACE --coverage -O0 -g)
+    target_link_options(sqlite_manager_coverage INTERFACE --coverage)
+endif()
+target_link_libraries(sqlite_manager_warnings INTERFACE sqlite_manager_coverage)
+
 # Locate clang-tidy once, preferring the version CI pins (18) so a local
 # run matches CI. Shared by the opt-in in-build linting and the `lint`
 # target below.
@@ -70,6 +82,35 @@ if(PROJECT_IS_TOP_LEVEL AND CLANG_TIDY_EXE)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Running clang-tidy (findings are errors)"
         VERBATIM)
+endif()
+
+# `cmake --build <build-dir> --target coverage` runs the tests and reports
+# line coverage for project code (terminal summary + HTML + XML). Needs a
+# coverage-instrumented build (the linux-coverage preset, i.e.
+# SQLITE_MANAGER_COVERAGE=ON) and gcovr.
+if(PROJECT_IS_TOP_LEVEL AND SQLITE_MANAGER_COVERAGE)
+    find_program(GCOVR_EXE gcovr)
+    if(GCOVR_EXE)
+        add_custom_target(coverage
+            COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                    ${CMAKE_BINARY_DIR}/coverage
+            COMMAND ${GCOVR_EXE} --root ${CMAKE_CURRENT_SOURCE_DIR}
+                    --filter ${CMAKE_CURRENT_SOURCE_DIR}/src
+                    --filter ${CMAKE_CURRENT_SOURCE_DIR}/cli
+                    --filter ${CMAKE_CURRENT_SOURCE_DIR}/gui/core
+                    --filter ${CMAKE_CURRENT_SOURCE_DIR}/include
+                    --print-summary
+                    --html-details ${CMAKE_BINARY_DIR}/coverage/index.html
+                    --xml ${CMAKE_BINARY_DIR}/coverage.xml
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Running tests and generating a coverage report"
+            VERBATIM)
+    else()
+        message(WARNING
+            "SQLITE_MANAGER_COVERAGE is ON but gcovr was not found; "
+            "the coverage target is unavailable")
+    endif()
 endif()
 
 # Packaging: build a .deb of the CLI with, from the build directory:

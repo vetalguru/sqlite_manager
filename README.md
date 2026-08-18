@@ -235,6 +235,18 @@ cmake --build build/asan
 ctest --preset linux-asan
 ```
 
+**Coverage** — build instrumented, run the tests, and generate a
+line-coverage report for project code (a terminal summary, HTML under
+`build/coverage/coverage/`, and Cobertura XML):
+
+```bash
+cmake --preset linux-coverage
+cmake --build build/coverage --target coverage
+```
+
+Requires `gcovr` (`sudo apt-get install gcovr`). CI runs it on every push
+and uploads the report as an artifact.
+
 ## Packaging (.deb)
 
 ```bash
