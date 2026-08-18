@@ -85,6 +85,17 @@ void SchemaSidebar::Show(const std::vector<ObjectInfo>& objects) {
     }
 }
 
+void SchemaSidebar::SelectObject(const std::string& name) {
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        if (objects_[i].name == name) {
+            if (auto* row = list_->get_row_at_index(static_cast<int>(i))) {
+                list_->select_row(*row);
+            }
+            return;
+        }
+    }
+}
+
 void SchemaSidebar::OnRowSelected(Gtk::ListBoxRow* row) {
     if (row == nullptr) return;
     const int index = row->get_index();
