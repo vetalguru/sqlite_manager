@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "gui/gtk/column_dialog.h"
 #include "gui/gtk/new_row_dialog.h"
 #include "gui/gtk/result_grid.h"
 #include "gui/gtk/schema_sidebar.h"
@@ -84,6 +85,12 @@ MainWindow::MainWindow() {
     delete_button_ = Gtk::make_managed<Gtk::Button>("Delete Row");
     delete_button_->signal_clicked().connect(
         sigc::mem_fun(*this, &MainWindow::OnDeleteRow));
+    add_column_button_ = Gtk::make_managed<Gtk::Button>("Add Column");
+    add_column_button_->signal_clicked().connect(
+        sigc::mem_fun(*this, &MainWindow::OnAddColumn));
+    drop_column_button_ = Gtk::make_managed<Gtk::Button>("Drop Column");
+    drop_column_button_->signal_clicked().connect(
+        sigc::mem_fun(*this, &MainWindow::OnDropColumn));
     begin_button_ = Gtk::make_managed<Gtk::Button>("Begin");
     begin_button_->signal_clicked().connect(
         sigc::mem_fun(*this, &MainWindow::OnBeginTransaction));
@@ -99,6 +106,10 @@ MainWindow::MainWindow() {
     toolbar->set_margin(6);
     toolbar->append(*add_button_);
     toolbar->append(*delete_button_);
+    toolbar->append(
+        *Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL));
+    toolbar->append(*add_column_button_);
+    toolbar->append(*drop_column_button_);
     toolbar->append(
         *Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL));
     toolbar->append(*begin_button_);
@@ -297,6 +308,53 @@ void MainWindow::OnDeleteRow() {
     status_->set_text("Row deleted.");
 }
 
+void MainWindow::OnAddColumn() {
+    if (!session_ || edit_table_.empty()) return;
+    auto* dialog = new AddColumnDialog(
+        *this, edit_table_,
+        [this](const std::string& name,
+               const std::string& type) -> std::optional<Glib::ustring> {
+            auto status = session_->AddColumn(edit_table_, name, type);
+            if (!status.ok()) return Glib::ustring(status.error().message);
+            ReloadTable();
+            RefreshSchema();
+            status_->set_text("Column \"" + name + "\" added.");
+            return std::nullopt;
+        });
+    dialog->signal_hide().connect([dialog]() { delete dialog; });
+    dialog->present();
+}
+
+void MainWindow::OnDropColumn() {
+    if (!session_ || edit_table_.empty()) return;
+    auto info = session_->DescribeTable(edit_table_);
+    if (!info.ok()) {
+        ReportError("Cannot read columns:\n" + info.error().message);
+        return;
+    }
+    std::vector<std::string> names;
+    for (const auto& column : info.value().columns) {
+        names.push_back(column.name);
+    }
+    if (names.empty()) {
+        status_->set_text("This table has no columns to drop.");
+        return;
+    }
+
+    auto* dialog = new DropColumnDialog(
+        *this, edit_table_, names,
+        [this](const std::string& name) -> std::optional<Glib::ustring> {
+            auto status = session_->DropColumn(edit_table_, name);
+            if (!status.ok()) return Glib::ustring(status.error().message);
+            ReloadTable();
+            RefreshSchema();
+            status_->set_text("Column \"" + name + "\" dropped.");
+            return std::nullopt;
+        });
+    dialog->signal_hide().connect([dialog]() { delete dialog; });
+    dialog->present();
+}
+
 void MainWindow::OnBeginTransaction() {
     if (!session_ || txn_) return;
     auto txn = sqlite_manager::Transaction::Begin(session_->connection());
@@ -377,6 +435,8 @@ void MainWindow::UpdateActions() {
     const bool in_txn = txn_.has_value();
     add_button_->set_sensitive(editable);
     delete_button_->set_sensitive(editable);
+    add_column_button_->set_sensitive(editable);
+    drop_column_button_->set_sensitive(editable);
     begin_button_->set_sensitive(has_session && !in_txn);
     commit_button_->set_sensitive(in_txn);
     rollback_button_->set_sensitive(in_txn);
