@@ -225,8 +225,10 @@ void MainWindow::LoadTable(const std::string& table) {
     sql_entry_->set_text("SELECT * FROM " + quoted);
     grid_->SetEditableResult(display, std::move(rowids));
     const auto rows = display.rows.size();
+    const std::string hint =
+        txn_ ? "double-click a cell to edit" : "press Begin to edit";
     status_->set_text(std::to_string(rows) + (rows == 1 ? " row" : " rows") +
-                      " · double-click a cell to edit");
+                      " · " + hint);
     UpdateActions();
 }
 
@@ -255,6 +257,10 @@ void MainWindow::RunSqlText(const std::string& sql) {
 bool MainWindow::OnCellEdited(std::int64_t rowid, const std::string& column,
                               const std::string& new_text) {
     if (!session_ || edit_table_.empty()) return false;
+    if (!txn_) {
+        status_->set_text("Press Begin to edit inside a transaction.");
+        return false;  // reverts the cell to its old value
+    }
     const sqlite_manager::Cell value{sqlite_manager::ValueType::kText,
                                      new_text};
     auto status = session_->UpdateCell(edit_table_, rowid, column, value);
@@ -363,7 +369,7 @@ void MainWindow::OnBeginTransaction() {
         return;
     }
     txn_.emplace(std::move(txn).value());
-    status_->set_text("Transaction started.");
+    status_->set_text("Transaction started — edits are now enabled.");
     UpdateActions();
 }
 
@@ -433,11 +439,14 @@ void MainWindow::UpdateActions() {
     const bool has_session = session_.has_value();
     const bool editable = has_session && !edit_table_.empty();
     const bool in_txn = txn_.has_value();
-    add_button_->set_sensitive(editable);
-    delete_button_->set_sensitive(editable);
-    add_column_button_->set_sensitive(editable);
-    drop_column_button_->set_sensitive(editable);
-    begin_button_->set_sensitive(has_session && !in_txn);
+    // Mutations are only allowed inside an explicit transaction, so every
+    // change can be reviewed and committed or rolled back as a unit.
+    const bool can_edit = editable && in_txn;
+    add_button_->set_sensitive(can_edit);
+    delete_button_->set_sensitive(can_edit);
+    add_column_button_->set_sensitive(can_edit);
+    drop_column_button_->set_sensitive(can_edit);
+    begin_button_->set_sensitive(editable && !in_txn);
     commit_button_->set_sensitive(in_txn);
     rollback_button_->set_sensitive(in_txn);
     export_button_->set_sensitive(!last_result_.columns.empty());
