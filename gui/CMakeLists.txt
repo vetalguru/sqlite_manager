@@ -39,6 +39,7 @@ if(SQLITE_MANAGER_BUILD_GUI)
         gtk/main_window.cpp
         gtk/schema_sidebar.cpp
         gtk/result_grid.cpp
+        gtk/result_tab.cpp
         gtk/new_row_dialog.cpp
         gtk/column_dialog.cpp)
 

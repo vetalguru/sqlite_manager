@@ -12,6 +12,7 @@
 #include <gtkmm/filedialog.h>
 #include <gtkmm/headerbar.h>
 #include <gtkmm/label.h>
+#include <gtkmm/notebook.h>
 #include <gtkmm/paned.h>
 #include <gtkmm/separator.h>
 
@@ -26,12 +27,25 @@
 #include "gui/gtk/column_dialog.h"
 #include "gui/gtk/new_row_dialog.h"
 #include "gui/gtk/result_grid.h"
+#include "gui/gtk/result_tab.h"
 #include "gui/gtk/schema_sidebar.h"
 #include "sqlite_manager/query_result.h"
 #include "sqlite_manager/result_writer.h"
 #include "sqlite_manager/sql_util.h"
 
 namespace sqlite_manager_gui::gtk {
+
+namespace {
+
+// Private identity for the single ad-hoc query tab. It cannot collide with
+// a schema object name (those never contain a control character).
+const char* const kQueryTabKey = "\x01query";
+
+std::string RowCount(std::size_t rows) {
+    return std::to_string(rows) + (rows == 1 ? " row" : " rows");
+}
+
+}  // namespace
 
 MainWindow::MainWindow() {
     set_title("SQLite Manager");
@@ -52,8 +66,8 @@ MainWindow::MainWindow() {
     sidebar_->signal_object_selected().connect(
         sigc::mem_fun(*this, &MainWindow::OnObjectSelected));
 
-    // Query panel: an SQL entry with a Run button, the result grid, and a
-    // status line.
+    // Query panel: an SQL entry with a Run button, a notebook of result
+    // tabs, and a status line.
     sql_entry_ = Gtk::make_managed<Gtk::Entry>();
     sql_entry_->set_placeholder_text("Enter SQL, press Enter to run");
     sql_entry_->set_hexpand(true);
@@ -70,13 +84,11 @@ MainWindow::MainWindow() {
     query_row->append(*sql_entry_);
     query_row->append(*run_button);
 
-    grid_ = Gtk::make_managed<ResultGrid>();
-    grid_->set_vexpand(true);
-    grid_->set_edit_handler([this](std::int64_t rowid,
-                                   const std::string& column,
-                                   const std::string& new_text) {
-        return OnCellEdited(rowid, column, new_text);
-    });
+    notebook_ = Gtk::make_managed<Gtk::Notebook>();
+    notebook_->set_vexpand(true);
+    notebook_->set_scrollable(true);
+    notebook_->signal_switch_page().connect(
+        [this](Gtk::Widget*, guint) { OnTabSwitched(); });
 
     // Row and transaction actions.
     add_button_ = Gtk::make_managed<Gtk::Button>("Add Row");
@@ -123,7 +135,7 @@ MainWindow::MainWindow() {
     auto* right = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
     right->append(*query_row);
     right->append(*toolbar);
-    right->append(*grid_);
+    right->append(*notebook_);
     right->append(*status_);
 
     auto* paned = Gtk::make_managed<Gtk::Paned>(Gtk::Orientation::HORIZONTAL);
@@ -163,11 +175,9 @@ void MainWindow::OpenDatabaseNow(const std::string& path) {
     }
     txn_.reset();  // abandon any transaction on the previous connection
     dirty_ = false;
-    edit_table_.clear();
-    last_result_ = {};
+    while (notebook_->get_n_pages() > 0) notebook_->remove_page(0);
     session_.emplace(std::move(opened).value());
     set_title("SQLite Manager — " + Glib::path_get_basename(path));
-    grid_->Clear();
     status_->set_text("Select a table or view, or enter SQL.");
     RefreshSchema();
     UpdateActions();
@@ -184,44 +194,91 @@ void MainWindow::RefreshSchema() {
 }
 
 void MainWindow::OnObjectSelected(const ObjectInfo& object) {
-    if (!session_ || restoring_selection_) return;
-    // Leaving the current table may abandon pending edits; confirm first.
-    // On cancel, restore the sidebar highlight to the current table.
-    ConfirmPending([this, object]() { ShowObject(object); },
-                   [this]() {
-                       if (edit_table_.empty()) return;
-                       restoring_selection_ = true;
-                       sidebar_->SelectObject(edit_table_);
-                       restoring_selection_ = false;
-                   });
+    if (!session_) return;
+    // Opening a table/view adds or focuses its own tab; nothing is lost, so
+    // this needs no confirmation even with a dirty transaction open.
+    ShowObject(object);
 }
 
 void MainWindow::ShowObject(const ObjectInfo& object) {
     if (!session_) return;
-    if (object.kind == ObjectKind::kTable) {
-        LoadTable(object.name);
-    } else if (object.kind == ObjectKind::kView) {
-        const std::string sql =
-            "SELECT * FROM " + sqlite_manager::QuoteIdentifier(object.name);
-        sql_entry_->set_text(sql);
-        RunSqlText(sql);  // views are read-only
-    } else {
-        edit_table_.clear();
-        last_result_ = {};
-        grid_->Clear();
+    if (object.kind != ObjectKind::kTable && object.kind != ObjectKind::kView) {
         status_->set_text("Select a table or view to see its rows.");
-        UpdateActions();
+        return;
+    }
+    if (auto* existing = find_tab(object.name)) {
+        notebook_->set_current_page(notebook_->page_num(*existing));
+        return;
+    }
+    auto* tab = add_tab(object.name, object.name);
+    if (object.kind == ObjectKind::kTable) {
+        LoadTableInto(tab, object.name);
+    } else {
+        LoadViewInto(tab, object.name);
     }
 }
 
-void MainWindow::LoadTable(const std::string& table) {
-    if (!session_) return;
+ResultTab* MainWindow::active_tab() const {
+    if (!notebook_) return nullptr;
+    const int page = notebook_->get_current_page();
+    if (page < 0) return nullptr;
+    return dynamic_cast<ResultTab*>(notebook_->get_nth_page(page));
+}
+
+ResultTab* MainWindow::find_tab(const std::string& key) const {
+    if (key.empty() || !notebook_) return nullptr;
+    const int pages = notebook_->get_n_pages();
+    for (int i = 0; i < pages; ++i) {
+        auto* tab = dynamic_cast<ResultTab*>(notebook_->get_nth_page(i));
+        if (tab && tab->key() == key) return tab;
+    }
+    return nullptr;
+}
+
+ResultTab* MainWindow::add_tab(const std::string& key,
+                               const Glib::ustring& title) {
+    auto* tab = Gtk::make_managed<ResultTab>(key);
+    tab->grid().set_edit_handler([this, tab](std::int64_t rowid,
+                                             const std::string& column,
+                                             const std::string& text) {
+        return OnCellEdited(tab->table(), rowid, column, text);
+    });
+
+    // A tab label with a close button.
+    auto* label_box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    label_box->set_spacing(4);
+    label_box->append(*Gtk::make_managed<Gtk::Label>(title));
+    auto* close = Gtk::make_managed<Gtk::Button>();
+    close->set_icon_name("window-close-symbolic");
+    close->set_has_frame(false);
+    close->set_tooltip_text("Close tab");
+    close->signal_clicked().connect([this, tab]() {
+        notebook_->remove_page(*tab);
+        UpdateActions();
+    });
+    label_box->append(*close);
+
+    const int page = notebook_->append_page(*tab, *label_box);
+    notebook_->set_current_page(page);
+    return tab;
+}
+
+void MainWindow::OnTabSwitched() {
+    if (auto* tab = active_tab(); tab && !tab->table().empty()) {
+        sql_entry_->set_text("SELECT * FROM " +
+                             sqlite_manager::QuoteIdentifier(tab->table()));
+    }
+    UpdateActions();
+}
+
+void MainWindow::LoadTableInto(ResultTab* tab, const std::string& table) {
+    if (!session_ || !tab) return;
     const std::string quoted = sqlite_manager::QuoteIdentifier(table);
     // rowid addresses the row for edits; hide it from the visible columns.
     auto result = session_->RunQuery("SELECT rowid, * FROM " + quoted);
     if (!result.ok()) {
         // No rowid (e.g. a WITHOUT ROWID table): fall back to read-only.
-        RunSqlText("SELECT * FROM " + quoted);
+        LoadViewInto(tab, table);
         return;
     }
 
@@ -238,50 +295,69 @@ void MainWindow::LoadTable(const std::string& table) {
         display.rows.emplace_back(row.begin() + 1, row.end());
     }
 
-    edit_table_ = table;
-    last_result_ = display;
+    tab->set_table(table);
+    tab->set_result(display);
     sql_entry_->set_text("SELECT * FROM " + quoted);
-    grid_->SetEditableResult(display, std::move(rowids));
-    const auto rows = display.rows.size();
+    tab->grid().SetEditableResult(display, std::move(rowids));
     const std::string hint =
         txn_ ? "double-click a cell to edit" : "press Begin to edit";
-    status_->set_text(std::to_string(rows) + (rows == 1 ? " row" : " rows") +
-                      " · " + hint);
+    status_->set_text(RowCount(display.rows.size()) + " · " + hint);
     UpdateActions();
 }
 
-void MainWindow::ReloadTable() {
-    if (!edit_table_.empty()) LoadTable(edit_table_);
+void MainWindow::LoadViewInto(ResultTab* tab, const std::string& name) {
+    if (!session_ || !tab) return;
+    const std::string quoted = sqlite_manager::QuoteIdentifier(name);
+    auto result = session_->RunQuery("SELECT * FROM " + quoted);
+    if (!result.ok()) {
+        status_->set_text("Error: " + result.error().message);
+        return;
+    }
+    tab->set_table("");  // read-only
+    tab->set_result(result.value());
+    sql_entry_->set_text("SELECT * FROM " + quoted);
+    tab->grid().SetResult(result.value());
+    status_->set_text(RowCount(result.value().rows.size()));
+    UpdateActions();
+}
+
+void MainWindow::ReloadTab(ResultTab* tab) {
+    if (tab && !tab->table().empty()) LoadTableInto(tab, tab->table());
 }
 
 void MainWindow::OnRunSql() { RunSqlText(sql_entry_->get_text().raw()); }
 
 void MainWindow::RunSqlText(const std::string& sql) {
     if (!session_) return;
-    edit_table_.clear();  // an arbitrary query result is not editable
     auto result = session_->RunQuery(sql);
     if (!result.ok()) {
-        grid_->Clear();
         status_->set_text("Error: " + result.error().message);
         return;
     }
-    last_result_ = result.value();
-    grid_->SetResult(result.value());
-    const auto rows = result.value().rows.size();
-    status_->set_text(std::to_string(rows) + (rows == 1 ? " row" : " rows"));
+    ResultTab* tab = find_tab(kQueryTabKey);
+    if (tab == nullptr) {
+        tab = add_tab(kQueryTabKey, "Query");
+    } else {
+        notebook_->set_current_page(notebook_->page_num(*tab));
+    }
+    tab->set_table("");  // an arbitrary query result is not editable
+    tab->set_result(result.value());
+    tab->grid().SetResult(result.value());
+    status_->set_text(RowCount(result.value().rows.size()));
     UpdateActions();
 }
 
-bool MainWindow::OnCellEdited(std::int64_t rowid, const std::string& column,
+bool MainWindow::OnCellEdited(const std::string& table, std::int64_t rowid,
+                              const std::string& column,
                               const std::string& new_text) {
-    if (!session_ || edit_table_.empty()) return false;
+    if (!session_ || table.empty()) return false;
     if (!txn_) {
         status_->set_text("Press Begin to edit inside a transaction.");
         return false;  // reverts the cell to its old value
     }
     const sqlite_manager::Cell value{sqlite_manager::ValueType::kText,
                                      new_text};
-    auto status = session_->UpdateCell(edit_table_, rowid, column, value);
+    auto status = session_->UpdateCell(table, rowid, column, value);
     if (!status.ok()) {
         status_->set_text("Update failed: " + status.error().message);
         return false;
@@ -292,8 +368,10 @@ bool MainWindow::OnCellEdited(std::int64_t rowid, const std::string& column,
 }
 
 void MainWindow::OnAddRow() {
-    if (!session_ || edit_table_.empty()) return;
-    auto info = session_->DescribeTable(edit_table_);
+    auto* tab = active_tab();
+    if (!session_ || tab == nullptr || tab->table().empty()) return;
+    const std::string table = tab->table();
+    auto info = session_->DescribeTable(table);
     if (!info.ok()) {
         ReportError("Cannot read columns:\n" + info.error().message);
         return;
@@ -302,15 +380,16 @@ void MainWindow::OnAddRow() {
     // The dialog collects values; this callback performs the insert and
     // reports success/failure back so the dialog can stay open on error.
     auto* dialog = new NewRowDialog(
-        *this, edit_table_, info.value().columns,
-        [this](const std::vector<std::pair<std::string, sqlite_manager::Cell>>&
-                   values) -> std::optional<Glib::ustring> {
-            auto inserted = session_->InsertRow(edit_table_, values);
+        *this, table, info.value().columns,
+        [this, tab,
+         table](const std::vector<std::pair<std::string, sqlite_manager::Cell>>&
+                    values) -> std::optional<Glib::ustring> {
+            auto inserted = session_->InsertRow(table, values);
             if (!inserted.ok()) {
                 return Glib::ustring(inserted.error().message);
             }
             dirty_ = true;
-            ReloadTable();
+            ReloadTab(tab);
             status_->set_text("Row added.");
             return std::nullopt;
         });
@@ -319,32 +398,35 @@ void MainWindow::OnAddRow() {
 }
 
 void MainWindow::OnDeleteRow() {
-    if (!session_ || edit_table_.empty()) return;
-    auto rowid = grid_->selected_rowid();
+    auto* tab = active_tab();
+    if (!session_ || tab == nullptr || tab->table().empty()) return;
+    auto rowid = tab->grid().selected_rowid();
     if (!rowid) {
         status_->set_text("Select a row to delete.");
         return;
     }
-    auto status = session_->DeleteRow(edit_table_, *rowid);
+    auto status = session_->DeleteRow(tab->table(), *rowid);
     if (!status.ok()) {
         status_->set_text("Delete failed: " + status.error().message);
         return;
     }
     dirty_ = true;
-    ReloadTable();
+    ReloadTab(tab);
     status_->set_text("Row deleted.");
 }
 
 void MainWindow::OnAddColumn() {
-    if (!session_ || edit_table_.empty()) return;
+    auto* tab = active_tab();
+    if (!session_ || tab == nullptr || tab->table().empty()) return;
+    const std::string table = tab->table();
     auto* dialog = new AddColumnDialog(
-        *this, edit_table_,
-        [this](const std::string& name,
-               const std::string& type) -> std::optional<Glib::ustring> {
-            auto status = session_->AddColumn(edit_table_, name, type);
+        *this, table,
+        [this, tab, table](const std::string& name, const std::string& type)
+            -> std::optional<Glib::ustring> {
+            auto status = session_->AddColumn(table, name, type);
             if (!status.ok()) return Glib::ustring(status.error().message);
             dirty_ = true;
-            ReloadTable();
+            ReloadTab(tab);
             RefreshSchema();
             status_->set_text("Column \"" + name + "\" added.");
             return std::nullopt;
@@ -354,8 +436,10 @@ void MainWindow::OnAddColumn() {
 }
 
 void MainWindow::OnDropColumn() {
-    if (!session_ || edit_table_.empty()) return;
-    auto info = session_->DescribeTable(edit_table_);
+    auto* tab = active_tab();
+    if (!session_ || tab == nullptr || tab->table().empty()) return;
+    const std::string table = tab->table();
+    auto info = session_->DescribeTable(table);
     if (!info.ok()) {
         ReportError("Cannot read columns:\n" + info.error().message);
         return;
@@ -370,12 +454,13 @@ void MainWindow::OnDropColumn() {
     }
 
     auto* dialog = new DropColumnDialog(
-        *this, edit_table_, names,
-        [this](const std::string& name) -> std::optional<Glib::ustring> {
-            auto status = session_->DropColumn(edit_table_, name);
+        *this, table, names,
+        [this, tab,
+         table](const std::string& name) -> std::optional<Glib::ustring> {
+            auto status = session_->DropColumn(table, name);
             if (!status.ok()) return Glib::ustring(status.error().message);
             dirty_ = true;
-            ReloadTable();
+            ReloadTab(tab);
             RefreshSchema();
             status_->set_text("Column \"" + name + "\" dropped.");
             return std::nullopt;
@@ -402,7 +487,7 @@ void MainWindow::OnCommitTransaction() {
     auto status = txn_->Commit();
     txn_.reset();
     dirty_ = false;
-    ReloadTable();
+    ReloadTab(active_tab());
     if (status.ok()) {
         status_->set_text("Committed.");
     } else {
@@ -416,7 +501,7 @@ void MainWindow::OnRollbackTransaction() {
     auto status = txn_->Rollback();
     txn_.reset();
     dirty_ = false;
-    ReloadTable();
+    ReloadTab(active_tab());
     if (status.ok()) {
         status_->set_text("Rolled back.");
     } else {
@@ -426,7 +511,8 @@ void MainWindow::OnRollbackTransaction() {
 }
 
 void MainWindow::OnExport() {
-    if (last_result_.columns.empty()) {
+    auto* tab = active_tab();
+    if (tab == nullptr || tab->result().columns.empty()) {
         status_->set_text("Nothing to export.");
         return;
     }
@@ -445,6 +531,8 @@ void MainWindow::OnExport() {
 }
 
 void MainWindow::ExportTo(const std::string& path) {
+    auto* tab = active_tab();
+    if (tab == nullptr) return;
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         status_->set_text("Cannot write: " + path);
@@ -454,16 +542,18 @@ void MainWindow::ExportTo(const std::string& path) {
     const bool json =
         path.size() >= 5 && path.compare(path.size() - 5, 5, ".json") == 0;
     if (json) {
-        sqlite_manager::JsonWriter().Write(last_result_, out);
+        sqlite_manager::JsonWriter().Write(tab->result(), out);
     } else {
-        sqlite_manager::CsvWriter().Write(last_result_, out);
+        sqlite_manager::CsvWriter().Write(tab->result(), out);
     }
     status_->set_text("Exported to " + Glib::path_get_basename(path));
 }
 
 void MainWindow::UpdateActions() {
     const bool has_session = session_.has_value();
-    const bool editable = has_session && !edit_table_.empty();
+    auto* tab = active_tab();
+    const bool editable =
+        has_session && tab != nullptr && !tab->table().empty();
     const bool in_txn = txn_.has_value();
     // Mutations are only allowed inside an explicit transaction, so every
     // change can be reviewed and committed or rolled back as a unit.
@@ -475,7 +565,8 @@ void MainWindow::UpdateActions() {
     begin_button_->set_sensitive(editable && !in_txn);
     commit_button_->set_sensitive(in_txn);
     rollback_button_->set_sensitive(in_txn);
-    export_button_->set_sensitive(!last_result_.columns.empty());
+    export_button_->set_sensitive(tab != nullptr &&
+                                  !tab->result().columns.empty());
 }
 
 void MainWindow::ReportError(const Glib::ustring& message) {
@@ -491,11 +582,13 @@ void MainWindow::ConfirmPending(std::function<void()> on_proceed,
         return;
     }
 
+    auto* tab = active_tab();
+    const std::string where = (tab != nullptr && !tab->table().empty())
+                                  ? "\"" + tab->table() + "\""
+                                  : "The database";
     auto dialog = Gtk::AlertDialog::create();
     dialog->set_modal(true);
     dialog->set_message("Save changes before continuing?");
-    const std::string where =
-        edit_table_.empty() ? "The database" : "\"" + edit_table_ + "\"";
     dialog->set_detail(where +
                        " has uncommitted changes in the open transaction.");
     dialog->set_buttons({"Cancel", "Discard", "Save"});
