@@ -32,7 +32,8 @@ add_executable(sqlite_manager_tests
     database_session_test.cpp
     row_editor_test.cpp
     csv_importer_test.cpp
-    schema_editor_test.cpp)
+    schema_editor_test.cpp
+    golden_test.cpp)
 
 target_link_libraries(sqlite_manager_tests
     PRIVATE
@@ -42,7 +43,14 @@ target_link_libraries(sqlite_manager_tests
         sqlite_manager_warnings
         GTest::gtest_main)
 
+# Point the golden-file runner at its corpus (a quoted string literal).
+target_compile_definitions(sqlite_manager_tests PRIVATE
+    SQLITE_MANAGER_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden")
+
 sqlite_manager_enable_lint(sqlite_manager_tests)
 
 include(GoogleTest)
+# Golden *.tst cases are discovered by a filesystem glob when the test
+# binary runs, so the binary always executes the full corpus. ctest's own
+# per-case list is refreshed on each rebuild of the test target.
 gtest_discover_tests(sqlite_manager_tests)
