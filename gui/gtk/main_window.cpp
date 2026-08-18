@@ -14,7 +14,6 @@
 #include <gtkmm/label.h>
 #include <gtkmm/notebook.h>
 #include <gtkmm/paned.h>
-#include <gtkmm/separator.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -56,11 +55,6 @@ MainWindow::MainWindow() {
     open_button->signal_clicked().connect(
         sigc::mem_fun(*this, &MainWindow::OnOpenClicked));
     header->pack_start(*open_button);
-    export_button_ = Gtk::make_managed<Gtk::Button>("Export…");
-    export_button_->signal_clicked().connect(
-        sigc::mem_fun(*this, &MainWindow::OnExport));
-    header->pack_end(*export_button_);
-    set_titlebar(*header);
 
     sidebar_ = Gtk::make_managed<SchemaSidebar>();
     sidebar_->signal_object_selected().connect(
@@ -90,19 +84,8 @@ MainWindow::MainWindow() {
     notebook_->signal_switch_page().connect(
         [this](Gtk::Widget*, guint) { OnTabSwitched(); });
 
-    // Row and transaction actions.
-    add_button_ = Gtk::make_managed<Gtk::Button>("Add Row");
-    add_button_->signal_clicked().connect(
-        sigc::mem_fun(*this, &MainWindow::OnAddRow));
-    delete_button_ = Gtk::make_managed<Gtk::Button>("Delete Row");
-    delete_button_->signal_clicked().connect(
-        sigc::mem_fun(*this, &MainWindow::OnDeleteRow));
-    add_column_button_ = Gtk::make_managed<Gtk::Button>("Add Column");
-    add_column_button_->signal_clicked().connect(
-        sigc::mem_fun(*this, &MainWindow::OnAddColumn));
-    drop_column_button_ = Gtk::make_managed<Gtk::Button>("Drop Column");
-    drop_column_button_->signal_clicked().connect(
-        sigc::mem_fun(*this, &MainWindow::OnDropColumn));
+    // Shared transaction controls sit in the header bar; the row/column and
+    // export controls belong to a specific table and live on its tab.
     begin_button_ = Gtk::make_managed<Gtk::Button>("Begin");
     begin_button_->signal_clicked().connect(
         sigc::mem_fun(*this, &MainWindow::OnBeginTransaction));
@@ -113,20 +96,13 @@ MainWindow::MainWindow() {
     rollback_button_->signal_clicked().connect(
         sigc::mem_fun(*this, &MainWindow::OnRollbackTransaction));
 
-    auto* toolbar = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-    toolbar->set_spacing(6);
-    toolbar->set_margin(6);
-    toolbar->append(*add_button_);
-    toolbar->append(*delete_button_);
-    toolbar->append(
-        *Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL));
-    toolbar->append(*add_column_button_);
-    toolbar->append(*drop_column_button_);
-    toolbar->append(
-        *Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::VERTICAL));
-    toolbar->append(*begin_button_);
-    toolbar->append(*commit_button_);
-    toolbar->append(*rollback_button_);
+    auto* txn_box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+    txn_box->set_spacing(6);
+    txn_box->append(*begin_button_);
+    txn_box->append(*commit_button_);
+    txn_box->append(*rollback_button_);
+    header->pack_end(*txn_box);
+    set_titlebar(*header);
 
     status_ = Gtk::make_managed<Gtk::Label>("Open a database to begin.");
     status_->set_halign(Gtk::Align::START);
@@ -134,7 +110,6 @@ MainWindow::MainWindow() {
 
     auto* right = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL);
     right->append(*query_row);
-    right->append(*toolbar);
     right->append(*notebook_);
     right->append(*status_);
 
@@ -242,6 +217,13 @@ ResultTab* MainWindow::add_tab(const std::string& key,
                                              const std::string& column,
                                              const std::string& text) {
         return OnCellEdited(tab->table(), rowid, column, text);
+    });
+    tab->set_actions({
+        [this, tab]() { AddRowTo(tab); },
+        [this, tab]() { DeleteRowFrom(tab); },
+        [this, tab]() { AddColumnTo(tab); },
+        [this, tab]() { DropColumnFrom(tab); },
+        [this, tab]() { ExportTab(tab); },
     });
 
     // A tab label with a close button.
@@ -367,8 +349,7 @@ bool MainWindow::OnCellEdited(const std::string& table, std::int64_t rowid,
     return true;
 }
 
-void MainWindow::OnAddRow() {
-    auto* tab = active_tab();
+void MainWindow::AddRowTo(ResultTab* tab) {
     if (!session_ || tab == nullptr || tab->table().empty()) return;
     const std::string table = tab->table();
     auto info = session_->DescribeTable(table);
@@ -397,8 +378,7 @@ void MainWindow::OnAddRow() {
     dialog->present();
 }
 
-void MainWindow::OnDeleteRow() {
-    auto* tab = active_tab();
+void MainWindow::DeleteRowFrom(ResultTab* tab) {
     if (!session_ || tab == nullptr || tab->table().empty()) return;
     auto rowid = tab->grid().selected_rowid();
     if (!rowid) {
@@ -415,8 +395,7 @@ void MainWindow::OnDeleteRow() {
     status_->set_text("Row deleted.");
 }
 
-void MainWindow::OnAddColumn() {
-    auto* tab = active_tab();
+void MainWindow::AddColumnTo(ResultTab* tab) {
     if (!session_ || tab == nullptr || tab->table().empty()) return;
     const std::string table = tab->table();
     auto* dialog = new AddColumnDialog(
@@ -435,8 +414,7 @@ void MainWindow::OnAddColumn() {
     dialog->present();
 }
 
-void MainWindow::OnDropColumn() {
-    auto* tab = active_tab();
+void MainWindow::DropColumnFrom(ResultTab* tab) {
     if (!session_ || tab == nullptr || tab->table().empty()) return;
     const std::string table = tab->table();
     auto info = session_->DescribeTable(table);
@@ -510,29 +488,29 @@ void MainWindow::OnRollbackTransaction() {
     UpdateActions();
 }
 
-void MainWindow::OnExport() {
-    auto* tab = active_tab();
+void MainWindow::ExportTab(ResultTab* tab) {
     if (tab == nullptr || tab->result().columns.empty()) {
         status_->set_text("Nothing to export.");
         return;
     }
+    // Copy the result: the save dialog is async and the tab could close.
+    auto result = tab->result();
     auto dialog = Gtk::FileDialog::create();
     dialog->set_title("Export Result");
     dialog->set_initial_name("result.csv");
-    dialog->save(*this,
-                 [this, dialog](const Glib::RefPtr<Gio::AsyncResult>& result) {
-                     try {
-                         auto file = dialog->save_finish(result);
-                         if (file) ExportTo(file->get_path());
-                     } catch (const Glib::Error&) {
-                         // Dialog dismissed or failed; nothing to write.
-                     }
-                 });
+    dialog->save(
+        *this, [this, dialog, result](const Glib::RefPtr<Gio::AsyncResult>& r) {
+            try {
+                auto file = dialog->save_finish(r);
+                if (file) WriteResult(result, file->get_path());
+            } catch (const Glib::Error&) {
+                // Dialog dismissed or failed; nothing to write.
+            }
+        });
 }
 
-void MainWindow::ExportTo(const std::string& path) {
-    auto* tab = active_tab();
-    if (tab == nullptr) return;
+void MainWindow::WriteResult(const sqlite_manager::QueryResult& result,
+                             const std::string& path) {
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         status_->set_text("Cannot write: " + path);
@@ -542,31 +520,31 @@ void MainWindow::ExportTo(const std::string& path) {
     const bool json =
         path.size() >= 5 && path.compare(path.size() - 5, 5, ".json") == 0;
     if (json) {
-        sqlite_manager::JsonWriter().Write(tab->result(), out);
+        sqlite_manager::JsonWriter().Write(result, out);
     } else {
-        sqlite_manager::CsvWriter().Write(tab->result(), out);
+        sqlite_manager::CsvWriter().Write(result, out);
     }
     status_->set_text("Exported to " + Glib::path_get_basename(path));
 }
 
 void MainWindow::UpdateActions() {
     const bool has_session = session_.has_value();
-    auto* tab = active_tab();
-    const bool editable =
-        has_session && tab != nullptr && !tab->table().empty();
     const bool in_txn = txn_.has_value();
-    // Mutations are only allowed inside an explicit transaction, so every
-    // change can be reviewed and committed or rolled back as a unit.
-    const bool can_edit = editable && in_txn;
-    add_button_->set_sensitive(can_edit);
-    delete_button_->set_sensitive(can_edit);
-    add_column_button_->set_sensitive(can_edit);
-    drop_column_button_->set_sensitive(can_edit);
-    begin_button_->set_sensitive(editable && !in_txn);
+
+    // Shared transaction controls.
+    begin_button_->set_sensitive(has_session && !in_txn);
     commit_button_->set_sensitive(in_txn);
     rollback_button_->set_sensitive(in_txn);
-    export_button_->set_sensitive(tab != nullptr &&
-                                  !tab->result().columns.empty());
+
+    // Each tab enables its own edit controls: an editable table, inside a
+    // transaction, so every change is committed or rolled back as a unit.
+    const int pages = notebook_ != nullptr ? notebook_->get_n_pages() : 0;
+    for (int i = 0; i < pages; ++i) {
+        auto* tab = dynamic_cast<ResultTab*>(notebook_->get_nth_page(i));
+        if (tab == nullptr) continue;
+        tab->set_edit_enabled(has_session && !tab->table().empty() && in_txn);
+        tab->set_export_enabled(!tab->result().columns.empty());
+    }
 }
 
 void MainWindow::ReportError(const Glib::ustring& message) {
