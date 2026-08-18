@@ -11,6 +11,7 @@
 
 #include "gui/core/database_session.h"
 #include "gui/core/schema_info.h"
+#include "sqlite_manager/query_result.h"
 #include "sqlite_manager/transaction.h"
 
 namespace Gtk {
@@ -25,11 +26,11 @@ namespace sqlite_manager_gui::gtk {
 class SchemaSidebar;
 class ResultTab;
 
-// The application's main window: a header bar with an "Open" action, a
-// schema sidebar, and a query panel (SQL entry + a notebook of result
-// tabs). It owns the open DatabaseSession and wires the views to the core.
-// Tables and views each open in their own tab; the toolbar and the shared
-// transaction act on the active tab.
+// The application's main window: a header bar with "Open" and the shared
+// transaction controls, a schema sidebar, and a notebook of result tabs.
+// Tables and views each open in their own tab. The row/column edit controls
+// and Export belong to a specific table, so they live on each tab; the
+// connection and the transaction are shared and span all tabs.
 class MainWindow : public Gtk::ApplicationWindow {
 public:
     MainWindow();
@@ -59,15 +60,21 @@ private:
     void RunSqlText(const std::string& sql);
     bool OnCellEdited(const std::string& table, std::int64_t rowid,
                       const std::string& column, const std::string& new_text);
-    void OnAddRow();
-    void OnDeleteRow();
-    void OnAddColumn();
-    void OnDropColumn();
+
+    // Per-tab edit and export actions (invoked from a tab's own toolbar).
+    void AddRowTo(ResultTab* tab);
+    void DeleteRowFrom(ResultTab* tab);
+    void AddColumnTo(ResultTab* tab);
+    void DropColumnFrom(ResultTab* tab);
+    void ExportTab(ResultTab* tab);
+    void WriteResult(const sqlite_manager::QueryResult& result,
+                     const std::string& path);
+
+    // Shared transaction controls.
     void OnBeginTransaction();
     void OnCommitTransaction();
     void OnRollbackTransaction();
-    void OnExport();
-    void ExportTo(const std::string& path);
+
     void UpdateActions();
     void ReportError(const Glib::ustring& message);
     // Runs `on_proceed` after resolving any pending (dirty) transaction: it
@@ -83,14 +90,9 @@ private:
     Gtk::Notebook* notebook_ = nullptr;
     Gtk::Entry* sql_entry_ = nullptr;
     Gtk::Label* status_ = nullptr;
-    Gtk::Button* add_button_ = nullptr;
-    Gtk::Button* delete_button_ = nullptr;
-    Gtk::Button* add_column_button_ = nullptr;
-    Gtk::Button* drop_column_button_ = nullptr;
     Gtk::Button* begin_button_ = nullptr;
     Gtk::Button* commit_button_ = nullptr;
     Gtk::Button* rollback_button_ = nullptr;
-    Gtk::Button* export_button_ = nullptr;
     bool dirty_ = false;  // the open transaction has uncommitted edits
 };
 
