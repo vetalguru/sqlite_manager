@@ -44,6 +44,8 @@ private:
                       const std::string& new_text);
     void OnAddRow();
     void OnDeleteRow();
+    void OnAddColumn();
+    void OnDropColumn();
     void OnBeginTransaction();
     void OnCommitTransaction();
     void OnRollbackTransaction();
@@ -60,6 +62,8 @@ private:
     Gtk::Label* status_ = nullptr;
     Gtk::Button* add_button_ = nullptr;
     Gtk::Button* delete_button_ = nullptr;
+    Gtk::Button* add_column_button_ = nullptr;
+    Gtk::Button* drop_column_button_ = nullptr;
     Gtk::Button* begin_button_ = nullptr;
     Gtk::Button* commit_button_ = nullptr;
     Gtk::Button* rollback_button_ = nullptr;
