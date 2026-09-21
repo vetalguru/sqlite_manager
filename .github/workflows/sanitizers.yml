@@ -1,14 +1,16 @@
 name: Sanitizers
 
+# Runs on every branch push, so a branch is built and tested before it is
+# merged. master is protected (changes arrive through a pull request that
+# needs these checks), so the run on master is the post-merge confirmation.
 on:
   push:
-    branches: [master]
-  pull_request:
+    branches: ['**']
 
-# Cancel superseded runs on the same ref.
+# Cancel superseded runs on the same ref, but let every run on master finish.
 concurrency:
   group: sanitizers-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   asan-ubsan:
