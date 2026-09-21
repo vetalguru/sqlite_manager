@@ -1,6 +1,7 @@
 #ifndef SQLITE_MANAGER_STATEMENT_H
 #define SQLITE_MANAGER_STATEMENT_H
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -35,9 +36,28 @@ class Statement final {
 public:
     enum class StepResult { kRow, kDone };
 
-    // Compiles a single SQL statement. Trailing content after the
-    // first statement is an error (kMisuse): Execute() handles batches.
+    // Compiles a single SQL statement. Only whitespace, comments and
+    // empty statements (";") may follow it; any further statement is an
+    // error (kMisuse): use PrepareNext() to walk a batch.
     static Result<Statement> Prepare(Connection& conn, const std::string& sql);
+
+    // Compiles the next statement of a batch, starting at byte offset
+    // `pos` in `sql`, and advances `pos` past it. Leading whitespace,
+    // comments and empty statements are skipped. When nothing but those
+    // remains, succeeds with an empty Statement (IsValid() is false) and
+    // leaves `pos` at the end. Prepare the next statement only after
+    // running the previous one: it may depend on the schema changes made.
+    //
+    //   std::size_t pos = 0;
+    //   while (true) {
+    //       auto stmt = Statement::PrepareNext(conn, sql, pos);
+    //       if (!stmt) { /* error */ }
+    //       if (!stmt.value().IsValid()) break;  // batch finished
+    //       /* bind, step, read */
+    //   }
+    static Result<Statement> PrepareNext(Connection& conn,
+                                         const std::string& sql,
+                                         std::size_t& pos);
 
     Statement() = default;  // empty (not prepared) state
     ~Statement();
