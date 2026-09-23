@@ -39,6 +39,9 @@ public:
     bool IsActive() const { return conn_ != nullptr; }
 
     // Commits the transaction. After success the guard becomes inactive.
+    // If COMMIT fails but the transaction is still open (e.g. kBusy, or a
+    // deferred constraint), the guard stays active: retry Commit() or
+    // Rollback(). If SQLite already rolled it back, the guard deactivates.
     // Fails with kMisuse if the transaction is no longer active.
     Status Commit();
 
