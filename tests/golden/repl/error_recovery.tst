@@ -6,6 +6,8 @@ a bad statement reports but the shell keeps going
 SELEKT 1;
 SELECT 2;
 .quit
+=== exit
+1
 === out
 +---+
 | 2 |

@@ -24,15 +24,24 @@ class LineReader;
 class Repl final {
 public:
     // The connection, reader, writer, and streams must outlive the object.
+    // `errors_set_exit_code` is for non-interactive input (scripts, pipes):
+    // any failed statement or dot command then makes Run() return 1.
     Repl(sqlite_manager::Connection& conn, LineReader& reader,
          const sqlite_manager::ResultWriter& writer, std::ostream& out,
-         std::ostream& err);
+         std::ostream& err, bool errors_set_exit_code);
 
-    // Runs the loop until EOF or .quit. Returns the exit code
-    // (0: session ended normally, regardless of SQL errors inside).
+    // Runs the loop until EOF or .quit. Returns the exit code: 1 if an
+    // error occurred and errors set the exit code, 0 otherwise (an
+    // interactive session ends normally regardless of errors inside).
     int Run();
 
 private:
+    // Executes SQL, recording a failure.
+    void RunSql(const std::string& sql);
+    // Marks the session as failed and returns the stream to report on.
+    std::ostream& Fail();
+    int ExitCode() const;
+
     // Returns true if the REPL should exit.
     bool HandleDotCommand(const std::string& command);
     void PrintHelp();
@@ -48,6 +57,8 @@ private:
     const sqlite_manager::ResultWriter& writer_;
     std::ostream& out_;
     std::ostream& err_;
+    bool errors_set_exit_code_;
+    bool had_error_ = false;
 };
 
 }  // namespace sqlite_manager_cli
