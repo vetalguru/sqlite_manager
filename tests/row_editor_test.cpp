@@ -2,11 +2,13 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "sqlite_manager/connection.h"
+#include "sqlite_manager/error.h"
 #include "sqlite_manager/query_result.h"
 #include "sqlite_manager/statement.h"
 
@@ -84,6 +86,61 @@ TEST(RowEditorTest, InsertRowWithNoValuesUsesDefaults) {
     auto rowid = InsertRow(conn, "t", {});
     ASSERT_TRUE(rowid.ok());
     EXPECT_EQ(Scalar(conn, "SELECT count(*) FROM t;"), "3");
+}
+
+TEST(RowEditorTest, UpdateCellFailsForMissingRow) {
+    auto conn = MakeDb();
+    const auto s = UpdateCell(conn, "t", 999, "name", Text("z"));
+    ASSERT_FALSE(s.ok());
+    EXPECT_EQ(s.error().code, sqlite_manager::ErrorCode::kError);
+}
+
+TEST(RowEditorTest, DeleteRowFailsForMissingRow) {
+    auto conn = MakeDb();
+    ASSERT_FALSE(DeleteRow(conn, "t", 999).ok());
+    EXPECT_EQ(Scalar(conn, "SELECT count(*) FROM t;"), "2");
+}
+
+TEST(RowEditorTest, RowIdColumnDefaultsToRowid) {
+    auto conn = MakeDb();
+    auto id = RowIdColumn(conn, "t");
+    ASSERT_TRUE(id.ok());
+    EXPECT_STREQ(id.value(), "rowid");
+}
+
+TEST(RowEditorTest, RowIdColumnSkipsShadowingColumns) {
+    auto conn = MakeDb();
+    // Matching is case-insensitive, as in SQLite.
+    ASSERT_TRUE(conn.Execute("CREATE TABLE s (ROWID TEXT, oid TEXT);").ok());
+    auto id = RowIdColumn(conn, "s");
+    ASSERT_TRUE(id.ok());
+    EXPECT_STREQ(id.value(), "_rowid_");
+}
+
+TEST(RowEditorTest, RowIdColumnFailsWhenAllAliasesShadowed) {
+    auto conn = MakeDb();
+    ASSERT_TRUE(
+        conn.Execute("CREATE TABLE s (rowid TEXT, oid TEXT, _rowid_ TEXT);")
+            .ok());
+    EXPECT_FALSE(RowIdColumn(conn, "s").ok());
+}
+
+// A column named "rowid" must not redirect edits: SQLite resolves the
+// name to that column, so a naive "WHERE rowid = ?" misses every row.
+TEST(RowEditorTest, EditsAddressRealRowidDespiteRowidColumn) {
+    auto conn = MakeDb();
+    ASSERT_TRUE(conn.Execute("CREATE TABLE s (rowid TEXT, v INTEGER);"
+                             "INSERT INTO s VALUES ('x', 1), ('y', 2);")
+                    .ok());
+    const std::int64_t y =
+        std::stoll(Scalar(conn, "SELECT oid FROM s WHERE v = 2;"));
+
+    ASSERT_TRUE(UpdateCell(conn, "s", y, "v", Text("9")).ok());
+    EXPECT_EQ(Scalar(conn, "SELECT v FROM s WHERE rowid = 'y';"), "9");
+    EXPECT_EQ(Scalar(conn, "SELECT v FROM s WHERE rowid = 'x';"), "1");
+
+    ASSERT_TRUE(DeleteRow(conn, "s", y).ok());
+    EXPECT_EQ(Scalar(conn, "SELECT group_concat(rowid) FROM s;"), "x");
 }
 
 TEST(RowEditorTest, QuotesIdentifiersSafely) {

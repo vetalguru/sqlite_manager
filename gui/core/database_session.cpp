@@ -41,6 +41,10 @@ Status DatabaseSession::Execute(const std::string& sql) {
     return conn_.Execute(sql);
 }
 
+Result<const char*> DatabaseSession::RowIdColumn(const std::string& table) {
+    return sqlite_manager_gui::RowIdColumn(conn_, table);
+}
+
 Status DatabaseSession::UpdateCell(const std::string& table, std::int64_t rowid,
                                    const std::string& column,
                                    const sqlite_manager::Cell& value) {

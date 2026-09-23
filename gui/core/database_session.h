@@ -46,6 +46,8 @@ public:
     // --- Single-row editing (by rowid) ---
     // For editing a real table's rows - the ones "SELECT rowid, * FROM t"
     // exposes. Table and column names are quoted and values are bound.
+    // RowIdColumn names the rowid to select (see gui/core/row_editor.h).
+    sqlite_manager::Result<const char*> RowIdColumn(const std::string& table);
     sqlite_manager::Status UpdateCell(const std::string& table,
                                       std::int64_t rowid,
                                       const std::string& column,

@@ -24,13 +24,20 @@ namespace sqlite_manager_gui {
 // affinity (so text "42" lands in an INTEGER column as an integer); a
 // kNull cell stores SQL NULL.
 
+// The name that addresses `table`'s rowid: "rowid", or "oid" / "_rowid_"
+// if a real column shadows it. Fails when all three are taken.
+sqlite_manager::Result<const char*> RowIdColumn(
+    sqlite_manager::Connection& conn, const std::string& table);
+
 // UPDATE <table> SET <column> = <value> WHERE rowid = <rowid>.
+// Fails unless exactly one row was affected.
 sqlite_manager::Status UpdateCell(sqlite_manager::Connection& conn,
                                   const std::string& table, std::int64_t rowid,
                                   const std::string& column,
                                   const sqlite_manager::Cell& value);
 
 // DELETE FROM <table> WHERE rowid = <rowid>.
+// Fails unless exactly one row was affected.
 sqlite_manager::Status DeleteRow(sqlite_manager::Connection& conn,
                                  const std::string& table, std::int64_t rowid);
 
