@@ -142,7 +142,9 @@ TEST_F(StatementTest, PrepareNextReportsSyntaxErrors) {
 }
 
 TEST_F(StatementTest, PrepareNextStopsAtEmbeddedNul) {
-    const std::string sql("SELECT 1\0SELECT 2", 18);
+    // 17 bytes: "SELECT 1", NUL, "SELECT 2" (the literal's own terminator
+    // is not part of the text).
+    const std::string sql("SELECT 1\0SELECT 2", 17);
     std::size_t pos = 0;
     int count = 0;
     while (true) {
