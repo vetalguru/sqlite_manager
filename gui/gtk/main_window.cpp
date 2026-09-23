@@ -257,7 +257,14 @@ void MainWindow::LoadTableInto(ResultTab* tab, const std::string& table) {
     if (!session_ || !tab) return;
     const std::string quoted = sqlite_manager::QuoteIdentifier(table);
     // rowid addresses the row for edits; hide it from the visible columns.
-    auto result = session_->RunQuery("SELECT rowid, * FROM " + quoted);
+    // Select it under a name no real column shadows.
+    auto id = session_->RowIdColumn(table);
+    if (!id.ok()) {
+        LoadViewInto(tab, table);  // rowid unreachable: read-only
+        return;
+    }
+    auto result = session_->RunQuery(std::string("SELECT ") + id.value() +
+                                     ", * FROM " + quoted);
     if (!result.ok()) {
         // No rowid (e.g. a WITHOUT ROWID table): fall back to read-only.
         LoadViewInto(tab, table);
@@ -617,7 +624,12 @@ void MainWindow::ConfirmPending(std::function<void()> on_proceed,
                 return;
             }
         } else {  // Discard
-            txn_->Rollback();
+            // Rollback() deactivates the transaction even on failure, so
+            // carrying on is safe; just don't hide the failure.
+            if (auto status = txn_->Rollback(); !status.ok()) {
+                status_->set_text("Rollback failed: " +
+                                  status.error().message);
+            }
         }
         txn_.reset();
         dirty_ = false;

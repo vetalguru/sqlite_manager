@@ -74,6 +74,88 @@ TEST_F(StatementTest, PrepareAllowsTrailingSemicolonAndWhitespace) {
     ASSERT_TRUE(stmt.ok()) << stmt.error().message;
 }
 
+TEST_F(StatementTest, PrepareAllowsTrailingComments) {
+    for (const char* sql : {"SELECT 1; -- note", "SELECT 1; /* note */",
+                            "SELECT 1 -- note\n", "SELECT 1;;  ;\n-- a\n/* b */"}) {
+        auto stmt = Statement::Prepare(conn_, sql);
+        EXPECT_TRUE(stmt.ok()) << sql << ": " << stmt.error().message;
+    }
+}
+
+TEST_F(StatementTest, PrepareRejectsSecondStatementAfterComment) {
+    auto stmt = Statement::Prepare(conn_, "SELECT 1; -- note\nSELECT 2");
+    ASSERT_FALSE(stmt.ok());
+    EXPECT_EQ(stmt.error().code, ErrorCode::kMisuse);
+}
+
+// ---------- PrepareNext ----------
+
+TEST_F(StatementTest, PrepareNextWalksABatch) {
+    const std::string sql =
+        "-- lead\nSELECT 1;  /* mid */ ;\nSELECT 2 -- tail\n";
+    std::size_t pos = 0;
+
+    std::vector<std::int64_t> values;
+    while (true) {
+        auto stmt = Statement::PrepareNext(conn_, sql, pos);
+        ASSERT_TRUE(stmt.ok()) << stmt.error().message;
+        if (!stmt.value().IsValid()) break;
+        auto step = stmt.value().Step();
+        ASSERT_TRUE(step.ok());
+        ASSERT_EQ(step.value(), StepResult::kRow);
+        values.push_back(stmt.value().ColumnInt64(0));
+    }
+    EXPECT_EQ(values, (std::vector<std::int64_t>{1, 2}));
+    EXPECT_EQ(pos, sql.size());
+}
+
+TEST_F(StatementTest, PrepareNextSeesSchemaChangesOfEarlierStatements) {
+    const std::string sql =
+        "CREATE TABLE fresh (x); INSERT INTO fresh VALUES (7);";
+    std::size_t pos = 0;
+    int count = 0;
+    while (true) {
+        auto stmt = Statement::PrepareNext(conn_, sql, pos);
+        ASSERT_TRUE(stmt.ok()) << stmt.error().message;
+        if (!stmt.value().IsValid()) break;
+        ASSERT_TRUE(stmt.value().Step().ok());
+        ++count;
+    }
+    EXPECT_EQ(count, 2);
+}
+
+TEST_F(StatementTest, PrepareNextOnBlankTextYieldsEmptyStatement) {
+    for (const char* sql : {"", "  \n", "-- only a comment", ";"}) {
+        std::size_t pos = 0;
+        auto stmt = Statement::PrepareNext(conn_, sql, pos);
+        ASSERT_TRUE(stmt.ok()) << sql;
+        EXPECT_FALSE(stmt.value().IsValid()) << sql;
+        EXPECT_EQ(pos, std::string(sql).size());
+    }
+}
+
+TEST_F(StatementTest, PrepareNextReportsSyntaxErrors) {
+    std::size_t pos = 0;
+    auto stmt = Statement::PrepareNext(conn_, "SELEC 1", pos);
+    ASSERT_FALSE(stmt.ok());
+    EXPECT_EQ(stmt.error().code, ErrorCode::kError);
+}
+
+TEST_F(StatementTest, PrepareNextStopsAtEmbeddedNul) {
+    // 17 bytes: "SELECT 1", NUL, "SELECT 2" (the literal's own terminator
+    // is not part of the text).
+    const std::string sql("SELECT 1\0SELECT 2", 17);
+    std::size_t pos = 0;
+    int count = 0;
+    while (true) {
+        auto stmt = Statement::PrepareNext(conn_, sql, pos);
+        ASSERT_TRUE(stmt.ok());
+        if (!stmt.value().IsValid()) break;
+        ++count;
+    }
+    EXPECT_EQ(count, 1);  // SQLite reads up to the NUL; must not hang
+}
+
 // ---------- Step / Column reads ----------
 
 TEST_F(StatementTest, ReadsAllRowsAndColumns) {

@@ -11,10 +11,13 @@ class ResultWriter;
 
 namespace sqlite_manager_cli {
 
-// Executes one SQL string against an open connection and reports the
-// outcome: query rows are collected into a QueryResult and handed to
-// `writer` for rendering; statements without rows print "OK"; failures
-// print "Error: ..." to `err`. Returns exit code (0 ok, 1 error).
+// Executes an SQL string (one statement or a batch) against an open
+// connection and reports the outcome. Statements run in order and stop at
+// the first failure, which prints "Error: ..." to `err`. The rows of each
+// query are collected into a QueryResult and handed to `writer` for
+// rendering (so a batch of several queries renders several results). If
+// no query printed anything, "OK" is printed once. Returns exit code
+// (0 ok, 1 error).
 //
 // Shared by the single-shot mode and the REPL.
 int ExecuteSql(sqlite_manager::Connection& conn, const std::string& sql,
