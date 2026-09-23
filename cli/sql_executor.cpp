@@ -65,26 +65,34 @@ int RunQuery(Statement& stmt, const ResultWriter& writer, std::ostream& out,
 int ExecuteSql(Connection& conn, const std::string& sql,
                const ResultWriter& writer, std::ostream& out,
                std::ostream& err) {
-    // Single statements go through Statement so result rows can be
-    // rendered; batches fail Prepare and fall back to Execute.
-    auto stmt = Statement::Prepare(conn, sql);
-    if (stmt.ok()) {
-        if (stmt.value().ColumnCount() > 0) {
-            return RunQuery(stmt.value(), writer, out, err);
+    // Statements run one at a time, in order, stopping at the first error
+    // (as sqlite3_exec does). Each is prepared only after the previous one
+    // has run, since it may depend on the schema that one changed.
+    bool printed_rows = false;
+    std::size_t pos = 0;
+    while (true) {
+        auto prepared = Statement::PrepareNext(conn, sql, pos);
+        if (!prepared.ok()) {
+            err << "Error: " << prepared.error().message << "\n";
+            return 1;
         }
-        if (auto step = stmt.value().Step(); !step.ok()) {
+        Statement& stmt = prepared.value();
+        if (!stmt.IsValid()) break;  // nothing left to run
+
+        if (stmt.ColumnCount() > 0) {
+            if (const int rc = RunQuery(stmt, writer, out, err); rc != 0) {
+                return rc;
+            }
+            printed_rows = true;
+        } else if (auto step = stmt.Step(); !step.ok()) {
             err << "Error: " << step.error().message << "\n";
             return 1;
         }
-        out << "OK\n";
-        return 0;
     }
 
-    if (auto s = conn.Execute(sql); !s.ok()) {
-        err << "Error: " << s.error().message << "\n";
-        return 1;
-    }
-    out << "OK\n";
+    // Statements that produce no rows are otherwise silent: confirm
+    // success once, unless a query already printed something.
+    if (!printed_rows) out << "OK\n";
     return 0;
 }
 

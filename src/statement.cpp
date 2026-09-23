@@ -2,7 +2,8 @@
 
 #include <sqlite3.h>
 
-#include <cstring>
+#include <climits>
+#include <cstddef>
 #include <utility>
 
 #include "sqlite_manager/connection.h"
@@ -28,43 +29,66 @@ Error UnknownParameter(const std::string& name) {
 
 }  // namespace
 
-Result<Statement> Statement::Prepare(Connection& conn, const std::string& sql) {
+Result<Statement> Statement::PrepareNext(Connection& conn,
+                                         const std::string& sql,
+                                         std::size_t& pos) {
     if (!conn.IsOpen()) {
         return Error(ErrorCode::kMisuse, SQLITE_MISUSE,
                      "connection is not open");
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    const char* tail = nullptr;
-    const int rc =
-        sqlite3_prepare_v2(conn.raw(), sql.c_str(),
-                           static_cast<int>(sql.size()) + 1, &stmt, &tail);
+    // A blank, comment-only or ";" prefix compiles to a NULL statement
+    // with the tail advanced past it: keep going until a real statement
+    // (or the end of the text) turns up.
+    while (pos < sql.size()) {
+        const std::size_t remaining = sql.size() - pos;
+        if (remaining >= static_cast<std::size_t>(INT_MAX)) {
+            return Error(ErrorCode::kTooBig, SQLITE_TOOBIG, "sql is too long");
+        }
 
-    if (rc != SQLITE_OK) {
-        // stmt is guaranteed NULL on failure; error state is on the db.
-        return Error::FromSqlite(sqlite3_extended_errcode(conn.raw()),
-                                 sqlite3_errmsg(conn.raw()));
+        sqlite3_stmt* stmt = nullptr;
+        const char* tail = nullptr;
+        const char* const begin = sql.c_str() + pos;
+        // The +1 includes the terminating NUL, which lets SQLite skip a
+        // copy of the text.
+        const int rc = sqlite3_prepare_v2(
+            conn.raw(), begin, static_cast<int>(remaining) + 1, &stmt, &tail);
+
+        if (rc != SQLITE_OK) {
+            // stmt is guaranteed NULL on failure; error state is on the db.
+            return Error::FromSqlite(sqlite3_extended_errcode(conn.raw()),
+                                     sqlite3_errmsg(conn.raw()));
+        }
+
+        const auto consumed = static_cast<std::size_t>(tail - begin);
+        pos += consumed;
+        if (stmt != nullptr) return Statement(stmt);
+        if (consumed == 0) break;  // no progress (embedded NUL): stop
     }
 
-    // sql was blank or contained only comments: nothing was compiled.
-    if (stmt == nullptr) {
+    pos = sql.size();
+    return Statement();
+}
+
+Result<Statement> Statement::Prepare(Connection& conn, const std::string& sql) {
+    std::size_t pos = 0;
+    auto first = PrepareNext(conn, sql, pos);
+    if (!first.ok()) return first;
+    if (!first.value().IsValid()) {
+        // sql was blank or contained only comments: nothing was compiled.
         return Error(ErrorCode::kMisuse, SQLITE_MISUSE,
                      "sql contains no statement");
     }
 
-    // Enforce the single-statement contract: anything but trailing
-    // whitespace after the first statement is a misuse.
-    if (tail != nullptr) {
-        for (const char* p = tail; *p != '\0'; ++p) {
-            if (std::strchr(" \t\r\n", *p) == nullptr) {
-                sqlite3_finalize(stmt);
-                return Error(ErrorCode::kMisuse, SQLITE_MISUSE,
-                             "sql contains more than one statement");
-            }
-        }
+    // Enforce the single-statement contract: whitespace, comments and
+    // empty statements may follow, another statement may not. Text that
+    // does not even compile counts as one, too.
+    auto extra = PrepareNext(conn, sql, pos);
+    if (!extra.ok() || extra.value().IsValid()) {
+        return Error(ErrorCode::kMisuse, SQLITE_MISUSE,
+                     "sql contains more than one statement");
     }
-
-    return Statement(stmt);
+    return first;
 }
 
 Statement::~Statement() {

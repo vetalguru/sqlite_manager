@@ -600,7 +600,12 @@ void MainWindow::ConfirmPending(std::function<void()> on_proceed,
                 return;
             }
         } else {  // Discard
-            txn_->Rollback();
+            // Rollback() deactivates the transaction even on failure, so
+            // carrying on is safe; just don't hide the failure.
+            if (auto status = txn_->Rollback(); !status.ok()) {
+                status_->set_text("Rollback failed: " +
+                                  status.error().message);
+            }
         }
         txn_.reset();
         dirty_ = false;
