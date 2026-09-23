@@ -219,6 +219,22 @@ TEST(ConnectionTest, SelfMoveAssignmentIsSafe) {
     EXPECT_EQ(a.raw(), handle);
 }
 
+// ---------- InTransaction ----------
+
+TEST(ConnectionTest, InTransactionTracksBeginAndCommit) {
+    Connection conn;
+    EXPECT_FALSE(conn.InTransaction());  // closed
+
+    ASSERT_TRUE(conn.Open(":memory:").ok());
+    EXPECT_FALSE(conn.InTransaction());  // autocommit
+
+    ASSERT_TRUE(conn.Execute("BEGIN").ok());
+    EXPECT_TRUE(conn.InTransaction());
+
+    ASSERT_TRUE(conn.Execute("COMMIT").ok());
+    EXPECT_FALSE(conn.InTransaction());
+}
+
 // ---------- File-based database ----------
 
 TEST(ConnectionTest, CreatesAndReopensFileDatabase) {
