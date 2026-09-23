@@ -1,5 +1,7 @@
 #include "cli_application.h"
 
+#include <unistd.h>
+
 #include <iostream>
 #include <istream>
 #include <ostream>
@@ -106,15 +108,21 @@ int CliApplication::Run(int argc, char** argv) {
         return ExecuteSql(conn, positional[1], *writer, out_, err_);
     }
 
+    // Only a person at a terminal gets a clean exit despite errors; a
+    // script (--batch, piped or redirected input) sees them in the exit
+    // code, as with the sqlite3 shell.
+    const bool interactive =
+        &in_ == &std::cin && !batch && isatty(STDIN_FILENO) != 0;
+
     // Real terminal session: use line editing with history. isocline
     // detects non-TTY stdin itself and degrades to plain reads.
     if (&in_ == &std::cin && !batch) {
         IsoclineLineReader reader;
-        Repl repl(conn, reader, *writer, out_, err_);
+        Repl repl(conn, reader, *writer, out_, err_, !interactive);
         return repl.Run();
     }
     StreamLineReader reader(in_, out_, !batch);
-    Repl repl(conn, reader, *writer, out_, err_);
+    Repl repl(conn, reader, *writer, out_, err_, !interactive);
     return repl.Run();
 }
 

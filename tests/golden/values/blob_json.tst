@@ -1,5 +1,5 @@
 === name
-a blob renders as its bytes, quoted in json
+a blob renders as a hex string in json
 === args
 --format
 json
@@ -7,5 +7,5 @@ json
 SELECT X'41' AS b
 === out
 [
-  {"b": "A"}
+  {"b": "41"}
 ]

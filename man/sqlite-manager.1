@@ -72,7 +72,10 @@ Success.
 .TP
 .B 1
 A usage error occurred, the database could not be opened, or a statement
-failed.
+failed. When the shell reads from a pipe, a file, or with
+.BR \-\-batch ,
+any failed statement or dot command also yields 1 at exit; an
+interactive session at a terminal exits 0 regardless of errors.
 .SH EXAMPLES
 Run one query and exit:
 .PP

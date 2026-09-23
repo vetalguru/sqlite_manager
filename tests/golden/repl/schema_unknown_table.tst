@@ -5,6 +5,8 @@
 === stdin
 .schema nope
 .quit
+=== exit
+1
 === out
 === err-contains
 No such table: nope

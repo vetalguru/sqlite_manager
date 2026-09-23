@@ -13,9 +13,10 @@ namespace sqlite_manager_cli {
 //   +----+---------+
 //   | 1  | M855    |
 //   +----+---------+
-// SQL NULL renders as the text "NULL". This is the terminal's native
-// presentation; CSV and JSON live in the library (sqlite_manager) as
-// reusable writers shared with other front-ends.
+// SQL NULL renders as the text "NULL", and control characters in a value
+// are escaped (\n, \t, \xHH) so they cannot break the frame. This is the
+// terminal's native presentation; CSV and JSON live in the library
+// (sqlite_manager) as reusable writers shared with other front-ends.
 class TableView final : public sqlite_manager::ResultWriter {
 public:
     void Write(const sqlite_manager::QueryResult& result,

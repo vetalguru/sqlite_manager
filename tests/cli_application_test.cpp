@@ -271,7 +271,7 @@ TEST(CliApplicationReplTest, MultilineSqlAccumulatesUntilSemicolon) {
 TEST(CliApplicationReplTest, SqlErrorDoesNotTerminateLoop) {
     const RunResult r =
         RunApp({"--batch", ":memory:"}, "SELEKT 1;\nSELECT 2;\n.quit\n");
-    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.exit_code, 1);  // non-interactive: errors set it
     EXPECT_NE(r.err.find("Error:"), std::string::npos);
     EXPECT_NE(r.out.find("| 2 |"), std::string::npos);  // loop survived
 }
@@ -315,7 +315,7 @@ TEST(CliApplicationReplTest, HelpCommandPrintsCommands) {
 
 TEST(CliApplicationReplTest, UnknownDotCommandReportsError) {
     const RunResult r = RunApp({"--batch", ":memory:"}, ".nope\n.quit\n");
-    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.exit_code, 1);  // non-interactive: errors set it
     EXPECT_NE(r.err.find("Unknown command: .nope"), std::string::npos);
 }
 
@@ -340,7 +340,7 @@ TEST(CliApplicationReplTest, SchemaWithNameFiltersToOneTable) {
 TEST(CliApplicationReplTest, SchemaUnknownTableReports) {
     const RunResult r =
         RunApp({"--batch", ":memory:"}, ".schema nope\n.quit\n");
-    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.exit_code, 1);  // non-interactive: errors set it
     EXPECT_NE(r.err.find("No such table: nope"), std::string::npos);
 }
 
@@ -360,14 +360,14 @@ TEST(CliApplicationReplTest, ReadExecutesStatementsFromFile) {
 
 TEST(CliApplicationReplTest, ReadWithoutArgumentReports) {
     const RunResult r = RunApp({"--batch", ":memory:"}, ".read\n.quit\n");
-    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.exit_code, 1);  // non-interactive: errors set it
     EXPECT_NE(r.err.find(".read requires a file"), std::string::npos);
 }
 
 TEST(CliApplicationReplTest, ReadNonexistentFileReports) {
     const RunResult r = RunApp({"--batch", ":memory:"},
                                ".read /no/such/file_98765.sql\n.quit\n");
-    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.exit_code, 1);  // non-interactive: errors set it
     EXPECT_NE(r.err.find("Cannot open"), std::string::npos);
 }
 
@@ -397,7 +397,7 @@ TEST(CliApplicationReplTest, ReadonlyAppliesInRepl) {
     // into it must fail - verifies the mode reaches the REPL.
     const RunResult r = RunApp({"--batch", "--readonly", ":memory:"},
                                "CREATE TABLE t (x);\n.quit\n");
-    EXPECT_EQ(r.exit_code, 0);
+    EXPECT_EQ(r.exit_code, 1);  // non-interactive: errors set it
     EXPECT_NE(r.err.find("Error:"), std::string::npos);
 }
 

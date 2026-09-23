@@ -5,6 +5,8 @@ an unknown dot-command reports without ending the shell
 === stdin
 .nope
 .quit
+=== exit
+1
 === out
 === err-contains
 Unknown command: .nope

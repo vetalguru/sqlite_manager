@@ -31,8 +31,26 @@ std::string Trim(const std::string& text) {
 
 Repl::Repl(sqlite_manager::Connection& conn, LineReader& reader,
            const sqlite_manager::ResultWriter& writer, std::ostream& out,
-           std::ostream& err)
-    : conn_(conn), reader_(reader), writer_(writer), out_(out), err_(err) {}
+           std::ostream& err, bool errors_set_exit_code)
+    : conn_(conn),
+      reader_(reader),
+      writer_(writer),
+      out_(out),
+      err_(err),
+      errors_set_exit_code_(errors_set_exit_code) {}
+
+void Repl::RunSql(const std::string& sql) {
+    if (ExecuteSql(conn_, sql, writer_, out_, err_) != 0) had_error_ = true;
+}
+
+std::ostream& Repl::Fail() {
+    had_error_ = true;
+    return err_;
+}
+
+int Repl::ExitCode() const {
+    return (errors_set_exit_code_ && had_error_) ? 1 : 0;
+}
 
 void Repl::PrintHelp() {
     out_ << "Enter SQL terminated by ';'. Dot commands:\n"
@@ -58,10 +76,8 @@ bool Repl::HandleDotCommand(const std::string& command) {
         return false;
     }
     if (cmd == ".tables") {
-        ExecuteSql(conn_,
-                   "SELECT name FROM sqlite_master "
-                   "WHERE type = 'table' ORDER BY name;",
-                   writer_, out_, err_);
+        RunSql("SELECT name FROM sqlite_master "
+               "WHERE type = 'table' ORDER BY name;");
         return false;
     }
     if (cmd == ".schema") {
@@ -70,13 +86,13 @@ bool Repl::HandleDotCommand(const std::string& command) {
     }
     if (cmd == ".read") {
         if (arg.empty()) {
-            err_ << ".read requires a file path\n";
+            Fail() << ".read requires a file path\n";
         } else {
             ReadFile(arg);
         }
         return false;
     }
-    err_ << "Unknown command: " << command << " (try .help)\n";
+    Fail() << "Unknown command: " << command << " (try .help)\n";
     return false;
 }
 
@@ -89,13 +105,13 @@ void Repl::PrintSchema(const std::string& table) {
 
     auto stmt = Statement::Prepare(conn_, sql);
     if (!stmt.ok()) {
-        err_ << "Error: " << stmt.error().message << "\n";
+        Fail() << "Error: " << stmt.error().message << "\n";
         return;
     }
     if (!table.empty()) {
         if (const auto bound = stmt.value().BindText(":name", table);
             !bound.ok()) {
-            err_ << "Error: " << bound.error().message << "\n";
+            Fail() << "Error: " << bound.error().message << "\n";
             return;
         }
     }
@@ -104,7 +120,7 @@ void Repl::PrintSchema(const std::string& table) {
     while (true) {
         auto step = stmt.value().Step();
         if (!step.ok()) {
-            err_ << "Error: " << step.error().message << "\n";
+            Fail() << "Error: " << step.error().message << "\n";
             return;
         }
         if (step.value() == Statement::StepResult::kDone) break;
@@ -113,14 +129,14 @@ void Repl::PrintSchema(const std::string& table) {
         found = true;
     }
     if (!table.empty() && !found) {
-        err_ << "No such table: " << table << "\n";
+        Fail() << "No such table: " << table << "\n";
     }
 }
 
 void Repl::ReadFile(const std::string& path) {
     const std::ifstream file(path);
     if (!file) {
-        err_ << "Cannot open: " << path << "\n";
+        Fail() << "Cannot open: " << path << "\n";
         return;
     }
     std::ostringstream contents;
@@ -136,13 +152,13 @@ void Repl::ExecuteScript(const std::string& script) {
         buffer += line;
         buffer += '\n';
         if (IsCompleteStatement(buffer)) {
-            ExecuteSql(conn_, buffer, writer_, out_, err_);
+            RunSql(buffer);
             buffer.clear();
         }
     }
     // Run any trailing statement missing its final semicolon.
     if (!Trim(buffer).empty()) {
-        ExecuteSql(conn_, buffer, writer_, out_, err_);
+        RunSql(buffer);
     }
 }
 
@@ -159,7 +175,7 @@ int Repl::Run() {
             const std::string trimmed = Trim(*line);
             if (!trimmed.empty() && trimmed[0] == '.') {
                 if (HandleDotCommand(trimmed)) {
-                    return 0;
+                    return ExitCode();
                 }
                 continue;
             }
@@ -169,7 +185,7 @@ int Repl::Run() {
         buffer += '\n';
 
         if (IsCompleteStatement(buffer)) {
-            ExecuteSql(conn_, buffer, writer_, out_, err_);
+            RunSql(buffer);
             buffer.clear();
         } else if (Trim(buffer).empty()) {
             buffer.clear();  // blank input, no continuation prompt
@@ -179,9 +195,9 @@ int Repl::Run() {
     // EOF with a non-empty buffer: execute what we have (mirrors the
     // official sqlite3 shell, which runs the pending input on exit).
     if (!Trim(buffer).empty()) {
-        ExecuteSql(conn_, buffer, writer_, out_, err_);
+        RunSql(buffer);
     }
-    return 0;
+    return ExitCode();
 }
 
 }  // namespace sqlite_manager_cli

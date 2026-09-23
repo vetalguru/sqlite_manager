@@ -27,8 +27,9 @@ public:
 };
 
 // JSON: an array of one object per row, keyed by column name. Integers
-// and reals are emitted as JSON numbers, text and blobs as strings
-// (escaped per RFC 8259), and SQL NULL as null.
+// and reals are emitted as JSON numbers (infinities, which JSON cannot
+// express, as null), text as strings (escaped per RFC 8259), blobs as
+// strings of lowercase hex, and SQL NULL as null.
 class JsonWriter final : public ResultWriter {
 public:
     void Write(const QueryResult& result, std::ostream& out) const override;
