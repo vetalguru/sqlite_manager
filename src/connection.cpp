@@ -96,6 +96,10 @@ Status Connection::Execute(const std::string& sql) {
     return Ok();
 }
 
+bool Connection::InTransaction() const {
+    return db_ != nullptr && sqlite3_get_autocommit(db_) == 0;
+}
+
 std::int64_t Connection::LastInsertRowId() const {
     if (db_ == nullptr) return 0;
     return sqlite3_last_insert_rowid(db_);

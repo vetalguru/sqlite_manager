@@ -470,13 +470,23 @@ void MainWindow::OnBeginTransaction() {
 void MainWindow::OnCommitTransaction() {
     if (!txn_) return;
     auto status = txn_->Commit();
+    if (!status.ok() && txn_->IsActive()) {
+        // The transaction survived (e.g. the database is locked): keep it,
+        // and the edits in it, so the user can retry or roll back.
+        // Resetting txn_ here would roll the edits back behind their back.
+        status_->set_text("Commit failed: " + status.error().message +
+                          " — changes kept; retry Commit or Rollback.");
+        return;
+    }
     txn_.reset();
     dirty_ = false;
     ReloadTab(active_tab());
     if (status.ok()) {
         status_->set_text("Committed.");
     } else {
-        status_->set_text("Commit failed: " + status.error().message);
+        // SQLite already rolled the transaction back itself.
+        status_->set_text("Commit failed: " + status.error().message +
+                          " — changes were rolled back.");
     }
     UpdateActions();
 }
@@ -595,7 +605,21 @@ void MainWindow::ConfirmPending(std::function<void()> on_proceed,
         if (button == 2) {  // Save
             auto status = txn_->Commit();
             if (!status.ok()) {
-                status_->set_text("Commit failed: " + status.error().message);
+                if (txn_->IsActive()) {
+                    status_->set_text("Commit failed: " +
+                                      status.error().message +
+                                      " — changes kept; retry Commit or "
+                                      "Rollback.");
+                } else {
+                    // SQLite rolled the transaction back itself; drop the
+                    // dead guard so the controls reflect reality.
+                    txn_.reset();
+                    dirty_ = false;
+                    UpdateActions();
+                    status_->set_text("Commit failed: " +
+                                      status.error().message +
+                                      " — changes were rolled back.");
+                }
                 if (on_cancel) on_cancel();
                 return;
             }

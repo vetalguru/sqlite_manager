@@ -42,8 +42,13 @@ Status Transaction::Commit() {
                      "transaction is not active");
     }
     Status s = conn_->Execute("COMMIT");
-    if (s.ok()) {
-        conn_ = nullptr;  // deactivate: destructor must not roll back
+    // Deactivate on success (the destructor must not roll back), and also
+    // when a failed COMMIT made SQLite roll the transaction back itself
+    // (e.g. on I/O errors): nothing is left to commit or roll back. If the
+    // transaction survived (e.g. kBusy), stay active so the caller can
+    // retry the commit or roll back.
+    if (s.ok() || !conn_->InTransaction()) {
+        conn_ = nullptr;
     }
     return s;
 }

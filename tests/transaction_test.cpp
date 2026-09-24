@@ -69,6 +69,47 @@ TEST_F(TransactionTest, CommitAfterCommitFailsWithMisuse) {
     EXPECT_EQ(s.error().code, ErrorCode::kMisuse);
 }
 
+// A COMMIT that fails while the transaction survives (here: a deferred
+// foreign key is still violated) must leave the guard active, keeping the
+// pending changes for a retry - not roll them back.
+TEST_F(TransactionTest, FailedCommitKeepsSurvivingTransactionActive) {
+    ASSERT_TRUE(conn_.Execute("PRAGMA foreign_keys = ON;"
+                              "CREATE TABLE parent (id INTEGER PRIMARY KEY);"
+                              "CREATE TABLE child (pid INTEGER REFERENCES "
+                              "parent(id) DEFERRABLE INITIALLY DEFERRED);")
+                    .ok());
+
+    auto txn = Transaction::Begin(conn_);
+    ASSERT_TRUE(txn.ok());
+    ASSERT_TRUE(conn_.Execute("INSERT INTO t VALUES (1)").ok());
+    ASSERT_TRUE(conn_.Execute("INSERT INTO child VALUES (7)").ok());
+
+    const Status failed = txn.value().Commit();
+    ASSERT_FALSE(failed.ok());
+    EXPECT_EQ(failed.error().code, ErrorCode::kConstraint);
+    EXPECT_TRUE(txn.value().IsActive());
+    EXPECT_TRUE(conn_.InTransaction());
+    EXPECT_EQ(CountRows(), 1);  // pending change still there
+
+    // Fix the violation and retry: the same guard commits.
+    ASSERT_TRUE(conn_.Execute("INSERT INTO parent VALUES (7)").ok());
+    ASSERT_TRUE(txn.value().Commit().ok());
+    EXPECT_FALSE(txn.value().IsActive());
+    EXPECT_EQ(CountRows(), 1);
+}
+
+// A COMMIT that fails because the transaction is already gone (as after
+// SQLite's own automatic rollback) deactivates the guard, so it is not
+// left pretending a transaction is open.
+TEST_F(TransactionTest, FailedCommitWithNoOpenTransactionDeactivates) {
+    auto txn = Transaction::Begin(conn_);
+    ASSERT_TRUE(txn.ok());
+    ASSERT_TRUE(conn_.Execute("ROLLBACK").ok());  // ended behind the guard
+
+    ASSERT_FALSE(txn.value().Commit().ok());
+    EXPECT_FALSE(txn.value().IsActive());
+}
+
 TEST_F(TransactionTest, BeginOnClosedConnectionFails) {
     Connection closed;
     auto txn = Transaction::Begin(closed);

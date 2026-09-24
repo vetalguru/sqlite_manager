@@ -39,6 +39,10 @@ public:
 
     bool IsOpen() const { return db_ != nullptr; }
 
+    // True while an explicit transaction (BEGIN ...) is open on this
+    // connection, i.e. it is not in autocommit mode. False when closed.
+    bool InTransaction() const;
+
     // Executes one or more SQL statements that produce no result rows
     Status Execute(const std::string& sql);
 
