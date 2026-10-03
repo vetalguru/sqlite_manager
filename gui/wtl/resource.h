@@ -12,6 +12,9 @@
 #define ID_TXN_COMMIT 40011
 #define ID_TXN_ROLLBACK 40012
 
+#define ID_EDIT_ADD_ROW 40020
+#define ID_EDIT_DELETE_ROW 40021
+
 // Child control identifiers (for WM_NOTIFY routing).
 #define IDC_OBJECTS 1000
 #define IDC_RESULTS 1001
