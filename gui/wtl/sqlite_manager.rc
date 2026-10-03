@@ -1,0 +1,13 @@
+#include "resource.h"
+
+// The frame's menu. The frame loads it by IDR_MAINFRAME (see
+// DECLARE_FRAME_WND_CLASS in main_frame.h).
+IDR_MAINFRAME MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Open Database...",  ID_FILE_OPEN
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",              ID_FILE_EXIT
+    END
+END

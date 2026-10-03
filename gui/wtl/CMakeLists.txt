@@ -24,7 +24,8 @@ if(SQLITE_MANAGER_BUILD_WTL_GUI)
             "SQLITE_MANAGER_BUILD_WTL_GUI requires Windows with MSVC (WTL/ATL).")
     endif()
 
-    add_executable(sqlite-manager-wtl WIN32 main.cpp)
+    enable_language(RC)  # compile the menu/resource script
+    add_executable(sqlite-manager-wtl WIN32 main.cpp sqlite_manager.rc)
     target_include_directories(sqlite-manager-wtl PRIVATE ${PROJECT_SOURCE_DIR})
     target_compile_definitions(sqlite-manager-wtl PRIVATE
         UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX STRICT)
