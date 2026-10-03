@@ -3,19 +3,23 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "gui/core/database_session.h"
 #include "gui/core/schema_info.h"
 #include "gui/wtl/resource.h"
+#include "gui/wtl/result_model.h"
 #include "gui/wtl/text.h"
 #include "gui/wtl/wtl.h"
+#include "sqlite_manager/query_result.h"
+#include "sqlite_manager/sql_util.h"
 
 namespace sqlite_manager_gui::wtl {
 
 // The application's main window: a File menu, a status bar, and a splitter
-// with the schema objects on the left and (added next) result tabs on the
-// right. It owns the open DatabaseSession and drives the views from the
-// toolkit-free core.
+// with the schema objects on the left and the rows of the selected table or
+// view on the right. It owns the open DatabaseSession and drives the views
+// from the toolkit-free core.
 class CMainFrame : public CFrameWindowImpl<CMainFrame> {
 public:
     DECLARE_FRAME_WND_CLASS(L"SqliteManagerWtlFrame", IDR_MAINFRAME)
@@ -26,6 +30,7 @@ public:
         MSG_WM_DESTROY(OnDestroy)
         COMMAND_ID_HANDLER(ID_FILE_OPEN, OnFileOpen)
         COMMAND_ID_HANDLER(ID_FILE_EXIT, OnFileExit)
+        NOTIFY_HANDLER(IDC_OBJECTS, LVN_ITEMACTIVATE, OnObjectActivate)
         CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
     // clang-format on
@@ -41,15 +46,16 @@ public:
         m_objects.Create(m_splitter, rcDefault, nullptr,
                          WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL |
                              LVS_SHOWSELALWAYS,
-                         WS_EX_CLIENTEDGE);
+                         WS_EX_CLIENTEDGE, IDC_OBJECTS);
         m_objects.SetExtendedListViewStyle(LVS_EX_FULLROWSELECT);
         m_objects.InsertColumn(0, L"Name", LVCFMT_LEFT, 160);
         m_objects.InsertColumn(1, L"Type", LVCFMT_LEFT, 70);
 
-        // Placeholder for the result tabs added in the next change.
         m_results.Create(m_splitter, rcDefault, nullptr,
                          WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS,
-                         WS_EX_CLIENTEDGE);
+                         WS_EX_CLIENTEDGE, IDC_RESULTS);
+        m_results.SetExtendedListViewStyle(LVS_EX_FULLROWSELECT |
+                                           LVS_EX_GRIDLINES);
 
         m_splitter.SetSplitterPanes(m_objects, m_results);
         m_splitter.SetSplitterPosPct(28);
@@ -78,6 +84,17 @@ public:
         return 0;
     }
 
+    // Double-click or Enter on a schema object loads its rows.
+    LRESULT OnObjectActivate(int /*id*/, LPNMHDR header, BOOL& /*handled*/) {
+        const LPNMITEMACTIVATE activate =
+            reinterpret_cast<LPNMITEMACTIVATE>(header);
+        const int index = activate->iItem;
+        if (index >= 0 && static_cast<size_t>(index) < objects_.size()) {
+            LoadObject(objects_[static_cast<size_t>(index)]);
+        }
+        return 0;
+    }
+
 private:
     void OpenDatabase(LPCWSTR wide_path) {
         auto opened = DatabaseSession::Open(Narrow(wide_path));
@@ -87,11 +104,13 @@ private:
             return;
         }
         session_.emplace(std::move(opened).value());
+        ClearResults();
         PopulateObjects();
     }
 
     void PopulateObjects() {
         m_objects.DeleteAllItems();
+        objects_.clear();
         if (!session_) return;
         auto objects = session_->ListObjects();
         if (!objects.ok()) {
@@ -99,15 +118,64 @@ private:
                           .c_str());
             return;
         }
+        objects_ = std::move(objects).value();
         int row = 0;
-        for (const ObjectInfo& object : objects.value()) {
+        for (const ObjectInfo& object : objects_) {
             m_objects.InsertItem(row, Widen(object.name).c_str());
             m_objects.SetItemText(row, 1, KindLabel(object.kind));
             ++row;
         }
         SetStatus(
-            Widen(std::to_string(objects.value().size()) + " schema objects")
-                .c_str());
+            Widen(std::to_string(objects_.size()) + " schema objects").c_str());
+    }
+
+    void LoadObject(const ObjectInfo& object) {
+        if (!session_) return;
+        if (object.kind != ObjectKind::kTable &&
+            object.kind != ObjectKind::kView) {
+            ClearResults();
+            SetStatus(L"Select a table or view to see its rows.");
+            return;
+        }
+        const std::string sql =
+            "SELECT * FROM " + sqlite_manager::QuoteIdentifier(object.name);
+        auto result = session_->RunQuery(sql);
+        if (!result.ok()) {
+            ClearResults();
+            SetStatus(Widen("Error: " + result.error().message).c_str());
+            return;
+        }
+        FillResults(result.value());
+        const size_t rows = result.value().rows.size();
+        SetStatus(Widen(object.name + " - " + std::to_string(rows) +
+                        (rows == 1 ? " row" : " rows"))
+                      .c_str());
+    }
+
+    void FillResults(const sqlite_manager::QueryResult& result) {
+        ClearResults();
+        const std::vector<std::string> titles = ColumnTitles(result);
+        for (size_t c = 0; c < titles.size(); ++c) {
+            m_results.InsertColumn(static_cast<int>(c),
+                                   Widen(titles[c]).c_str(), LVCFMT_LEFT, 140);
+        }
+        for (size_t r = 0; r < result.rows.size(); ++r) {
+            const std::vector<std::string> cells = RowText(result, r);
+            m_results.InsertItem(static_cast<int>(r),
+                                 cells.empty() ? L"" : Widen(cells[0]).c_str());
+            for (size_t c = 1; c < cells.size(); ++c) {
+                m_results.SetItemText(static_cast<int>(r), static_cast<int>(c),
+                                      Widen(cells[c]).c_str());
+            }
+        }
+    }
+
+    void ClearResults() {
+        m_results.DeleteAllItems();
+        CHeaderCtrl header = m_results.GetHeader();
+        for (int i = header.GetItemCount() - 1; i >= 0; --i) {
+            m_results.DeleteColumn(i);
+        }
     }
 
     static LPCWSTR KindLabel(ObjectKind kind) {
@@ -132,6 +200,7 @@ private:
     CListViewCtrl m_objects;
     CListViewCtrl m_results;
     std::optional<DatabaseSession> session_;
+    std::vector<ObjectInfo> objects_;  // parallel to the left list rows
 };
 
 }  // namespace sqlite_manager_gui::wtl
