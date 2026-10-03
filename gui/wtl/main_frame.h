@@ -13,6 +13,7 @@
 #include "gui/wtl/wtl.h"
 #include "sqlite_manager/query_result.h"
 #include "sqlite_manager/sql_util.h"
+#include "sqlite_manager/transaction.h"
 
 namespace sqlite_manager_gui::wtl {
 
@@ -30,6 +31,9 @@ public:
         MSG_WM_DESTROY(OnDestroy)
         COMMAND_ID_HANDLER(ID_FILE_OPEN, OnFileOpen)
         COMMAND_ID_HANDLER(ID_FILE_EXIT, OnFileExit)
+        COMMAND_ID_HANDLER(ID_TXN_BEGIN, OnTxnBegin)
+        COMMAND_ID_HANDLER(ID_TXN_COMMIT, OnTxnCommit)
+        COMMAND_ID_HANDLER(ID_TXN_ROLLBACK, OnTxnRollback)
         NOTIFY_HANDLER(IDC_OBJECTS, LVN_ITEMACTIVATE, OnObjectActivate)
         CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
@@ -95,6 +99,48 @@ public:
         return 0;
     }
 
+    LRESULT OnTxnBegin(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                       BOOL& /*handled*/) {
+        if (!session_ || txn_) return 0;
+        auto begun = sqlite_manager::Transaction::Begin(session_->connection());
+        if (!begun.ok()) {
+            SetStatus(Widen("Begin failed: " + begun.error().message).c_str());
+            return 0;
+        }
+        txn_.emplace(std::move(begun).value());
+        dirty_ = false;
+        SetStatus(L"Transaction started - edits are now enabled.");
+        return 0;
+    }
+
+    LRESULT OnTxnCommit(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                        BOOL& /*handled*/) {
+        if (!txn_) return 0;
+        const sqlite_manager::Status status = txn_->Commit();
+        txn_.reset();
+        dirty_ = false;
+        ReloadCurrent();
+        SetStatus(
+            status.ok()
+                ? L"Committed."
+                : Widen("Commit failed: " + status.error().message).c_str());
+        return 0;
+    }
+
+    LRESULT OnTxnRollback(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                          BOOL& /*handled*/) {
+        if (!txn_) return 0;
+        const sqlite_manager::Status status = txn_->Rollback();
+        txn_.reset();
+        dirty_ = false;
+        ReloadCurrent();
+        SetStatus(
+            status.ok()
+                ? L"Rolled back."
+                : Widen("Rollback failed: " + status.error().message).c_str());
+        return 0;
+    }
+
 private:
     void OpenDatabase(LPCWSTR wide_path) {
         auto opened = DatabaseSession::Open(Narrow(wide_path));
@@ -133,10 +179,12 @@ private:
         if (!session_) return;
         if (object.kind != ObjectKind::kTable &&
             object.kind != ObjectKind::kView) {
+            current_.reset();
             ClearResults();
             SetStatus(L"Select a table or view to see its rows.");
             return;
         }
+        current_ = object;
         const std::string sql =
             "SELECT * FROM " + sqlite_manager::QuoteIdentifier(object.name);
         auto result = session_->RunQuery(sql);
@@ -178,6 +226,11 @@ private:
         }
     }
 
+    // Re-run the current object's query (e.g. after commit/rollback).
+    void ReloadCurrent() {
+        if (current_) LoadObject(*current_);
+    }
+
     static LPCWSTR KindLabel(ObjectKind kind) {
         switch (kind) {
             case ObjectKind::kTable:
@@ -200,7 +253,10 @@ private:
     CListViewCtrl m_objects;
     CListViewCtrl m_results;
     std::optional<DatabaseSession> session_;
-    std::vector<ObjectInfo> objects_;  // parallel to the left list rows
+    std::optional<sqlite_manager::Transaction> txn_;
+    std::vector<ObjectInfo> objects_;    // parallel to the left list rows
+    std::optional<ObjectInfo> current_;  // the object shown on the right
+    bool dirty_ = false;                 // open transaction has edits
 };
 
 }  // namespace sqlite_manager_gui::wtl
