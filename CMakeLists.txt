@@ -13,10 +13,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(GitVersion)
 
-# Strict warnings for project code only (not for sqlite3.c)
+# Strict warnings for project code only (not for sqlite3.c). The flag names
+# differ by compiler: GCC/Clang take the -W set, MSVC takes /W4 (used by the
+# Windows WTL build).
 add_library(sqlite_manager_warnings INTERFACE)
 target_compile_options(sqlite_manager_warnings INTERFACE
-    -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic;-Wconversion;-Wshadow>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4>)
 
 # Optional gcov/gcovr coverage instrumentation. It rides on the warnings
 # interface, which is linked to exactly our targets (never third_party),
