@@ -50,3 +50,8 @@ if(SQLITE_MANAGER_BUILD_GUI)
             sqlite_manager_gui_core
             PkgConfig::GTKMM)
 endif()
+
+# The WTL (Windows Template Library) GUI lives in its own subdirectory. Its
+# toolkit-free result model builds everywhere (and is unit-tested); the
+# application itself builds only on Windows with MSVC, behind an opt-in.
+add_subdirectory(wtl)
