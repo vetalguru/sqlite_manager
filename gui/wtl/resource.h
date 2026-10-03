@@ -16,4 +16,12 @@
 #define IDC_OBJECTS 1000
 #define IDC_RESULTS 1001
 
+// Edit-cell dialog.
+#define IDD_EDIT_CELL 200
+#define IDC_EDIT_VALUE 2001
+
+#ifndef IDC_STATIC
+#define IDC_STATIC (-1)
+#endif
+
 #endif  // SQLITE_MANAGER_GUI_WTL_RESOURCE_H
