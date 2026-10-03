@@ -1,12 +1,15 @@
 #ifndef SQLITE_MANAGER_GUI_WTL_MAIN_FRAME_H
 #define SQLITE_MANAGER_GUI_WTL_MAIN_FRAME_H
 
+#include <cstdint>
+#include <cstdlib>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "gui/core/database_session.h"
 #include "gui/core/schema_info.h"
+#include "gui/wtl/edit_cell_dialog.h"
 #include "gui/wtl/resource.h"
 #include "gui/wtl/result_model.h"
 #include "gui/wtl/text.h"
@@ -35,6 +38,7 @@ public:
         COMMAND_ID_HANDLER(ID_TXN_COMMIT, OnTxnCommit)
         COMMAND_ID_HANDLER(ID_TXN_ROLLBACK, OnTxnRollback)
         NOTIFY_HANDLER(IDC_OBJECTS, LVN_ITEMACTIVATE, OnObjectActivate)
+        NOTIFY_HANDLER(IDC_RESULTS, NM_DBLCLK, OnResultDblClick)
         CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
     // clang-format on
@@ -141,6 +145,15 @@ public:
         return 0;
     }
 
+    // Double-click a result cell to edit it (editable table, in a
+    // transaction).
+    LRESULT OnResultDblClick(int /*id*/, LPNMHDR header, BOOL& /*handled*/) {
+        const LPNMITEMACTIVATE activate =
+            reinterpret_cast<LPNMITEMACTIVATE>(header);
+        EditCell(activate->iItem, activate->iSubItem);
+        return 0;
+    }
+
 private:
     void OpenDatabase(LPCWSTR wide_path) {
         auto opened = DatabaseSession::Open(Narrow(wide_path));
@@ -177,27 +190,106 @@ private:
 
     void LoadObject(const ObjectInfo& object) {
         if (!session_) return;
-        if (object.kind != ObjectKind::kTable &&
-            object.kind != ObjectKind::kView) {
+        if (object.kind == ObjectKind::kTable) {
+            current_ = object;
+            LoadEditable(object.name);
+        } else if (object.kind == ObjectKind::kView) {
+            current_ = object;
+            LoadReadonly(object.name);
+        } else {
             current_.reset();
+            editable_ = false;
             ClearResults();
             SetStatus(L"Select a table or view to see its rows.");
+        }
+    }
+
+    // A table loaded with its rowid so cells can be addressed for editing;
+    // the rowid column is kept out of the display. Falls back to read-only
+    // if the table has no rowid (e.g. WITHOUT ROWID).
+    void LoadEditable(const std::string& name) {
+        const std::string quoted = sqlite_manager::QuoteIdentifier(name);
+        auto result = session_->RunQuery("SELECT rowid, * FROM " + quoted);
+        if (!result.ok()) {
+            LoadReadonly(name);
             return;
         }
-        current_ = object;
-        const std::string sql =
-            "SELECT * FROM " + sqlite_manager::QuoteIdentifier(object.name);
-        auto result = session_->RunQuery(sql);
+        const sqlite_manager::QueryResult& full = result.value();
+        sqlite_manager::QueryResult display;
+        for (size_t i = 1; i < full.columns.size(); ++i) {
+            display.columns.push_back(full.columns[i]);
+        }
+        rowids_.clear();
+        for (const std::vector<sqlite_manager::Cell>& row : full.rows) {
+            rowids_.push_back(row.empty()
+                                  ? 0
+                                  : static_cast<std::int64_t>(std::strtoll(
+                                        row[0].text.c_str(), nullptr, 10)));
+            display.rows.emplace_back(row.begin() + 1, row.end());
+        }
+        editable_ = true;
+        current_columns_ = display.columns;
+        current_result_ = display;
+        FillResults(display);
+        ReportRowCount(name, display.rows.size());
+    }
+
+    void LoadReadonly(const std::string& name) {
+        const std::string quoted = sqlite_manager::QuoteIdentifier(name);
+        auto result = session_->RunQuery("SELECT * FROM " + quoted);
         if (!result.ok()) {
+            editable_ = false;
             ClearResults();
             SetStatus(Widen("Error: " + result.error().message).c_str());
             return;
         }
+        editable_ = false;
+        rowids_.clear();
+        current_columns_ = result.value().columns;
+        current_result_ = result.value();
         FillResults(result.value());
-        const size_t rows = result.value().rows.size();
-        SetStatus(Widen(object.name + " - " + std::to_string(rows) +
+        ReportRowCount(name, result.value().rows.size());
+    }
+
+    void ReportRowCount(const std::string& name, size_t rows) {
+        SetStatus(Widen(name + " - " + std::to_string(rows) +
                         (rows == 1 ? " row" : " rows"))
                       .c_str());
+    }
+
+    // Edit one cell (double-clicked) of the current editable table.
+    void EditCell(int item, int sub) {
+        if (!session_ || !current_ || !editable_) return;
+        if (!txn_) {
+            SetStatus(L"Press Begin to edit inside a transaction.");
+            return;
+        }
+        if (item < 0 || static_cast<size_t>(item) >= rowids_.size()) return;
+        if (sub < 0 || static_cast<size_t>(sub) >= current_columns_.size()) {
+            return;
+        }
+        const std::vector<sqlite_manager::Cell>& row =
+            current_result_.rows[static_cast<size_t>(item)];
+        const std::wstring value =
+            Widen(static_cast<size_t>(sub) < row.size()
+                      ? CellText(row[static_cast<size_t>(sub)])
+                      : std::string());
+        CEditCellDialog dialog(
+            Widen(current_columns_[static_cast<size_t>(sub)]), value);
+        if (dialog.DoModal(*this) != IDOK) return;
+        const sqlite_manager::Cell cell{sqlite_manager::ValueType::kText,
+                                        Narrow(dialog.Value())};
+        const sqlite_manager::Status status = session_->UpdateCell(
+            current_->name, rowids_[static_cast<size_t>(item)],
+            current_columns_[static_cast<size_t>(sub)], cell);
+        if (!status.ok()) {
+            SetStatus(
+                Widen("Update failed: " + status.error().message).c_str());
+            return;
+        }
+        dirty_ = true;
+        ReloadCurrent();
+        SetStatus(L"Updated.");
     }
 
     void FillResults(const sqlite_manager::QueryResult& result) {
@@ -256,7 +348,11 @@ private:
     std::optional<sqlite_manager::Transaction> txn_;
     std::vector<ObjectInfo> objects_;    // parallel to the left list rows
     std::optional<ObjectInfo> current_;  // the object shown on the right
-    bool dirty_ = false;                 // open transaction has edits
+    sqlite_manager::QueryResult current_result_;  // rows shown on the right
+    std::vector<std::int64_t> rowids_;            // rowid per displayed row
+    std::vector<std::string> current_columns_;    // displayed column names
+    bool editable_ = false;  // the current object is an editable table
+    bool dirty_ = false;     // open transaction has edits
 };
 
 }  // namespace sqlite_manager_gui::wtl
