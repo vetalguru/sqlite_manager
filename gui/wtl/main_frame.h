@@ -37,6 +37,8 @@ public:
         COMMAND_ID_HANDLER(ID_TXN_BEGIN, OnTxnBegin)
         COMMAND_ID_HANDLER(ID_TXN_COMMIT, OnTxnCommit)
         COMMAND_ID_HANDLER(ID_TXN_ROLLBACK, OnTxnRollback)
+        COMMAND_ID_HANDLER(ID_EDIT_ADD_ROW, OnAddRow)
+        COMMAND_ID_HANDLER(ID_EDIT_DELETE_ROW, OnDeleteRow)
         NOTIFY_HANDLER(IDC_OBJECTS, LVN_ITEMACTIVATE, OnObjectActivate)
         NOTIFY_HANDLER(IDC_RESULTS, NM_DBLCLK, OnResultDblClick)
         CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
@@ -154,7 +156,57 @@ public:
         return 0;
     }
 
+    LRESULT OnAddRow(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                     BOOL& /*handled*/) {
+        if (!EnsureEditable()) return 0;
+        auto inserted = session_->InsertRow(current_->name, {});
+        if (!inserted.ok()) {
+            SetStatus(
+                Widen("Insert failed: " + inserted.error().message).c_str());
+            return 0;
+        }
+        dirty_ = true;
+        ReloadCurrent();
+        SetStatus(L"Row added - double-click a cell to edit it.");
+        return 0;
+    }
+
+    LRESULT OnDeleteRow(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                        BOOL& /*handled*/) {
+        if (!EnsureEditable()) return 0;
+        const int selected = m_results.GetSelectedIndex();
+        if (selected < 0 || static_cast<size_t>(selected) >= rowids_.size()) {
+            SetStatus(L"Select a row to delete.");
+            return 0;
+        }
+        const sqlite_manager::Status status = session_->DeleteRow(
+            current_->name, rowids_[static_cast<size_t>(selected)]);
+        if (!status.ok()) {
+            SetStatus(
+                Widen("Delete failed: " + status.error().message).c_str());
+            return 0;
+        }
+        dirty_ = true;
+        ReloadCurrent();
+        SetStatus(L"Row deleted.");
+        return 0;
+    }
+
 private:
+    // True when the current object is an editable table inside a
+    // transaction; otherwise reports why and returns false.
+    bool EnsureEditable() {
+        if (!session_ || !current_ || !editable_) {
+            SetStatus(L"Select a table to edit.");
+            return false;
+        }
+        if (!txn_) {
+            SetStatus(L"Press Begin to edit inside a transaction.");
+            return false;
+        }
+        return true;
+    }
+
     void OpenDatabase(LPCWSTR wide_path) {
         auto opened = DatabaseSession::Open(Narrow(wide_path));
         if (!opened.ok()) {

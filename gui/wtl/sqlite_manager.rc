@@ -12,6 +12,11 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "E&xit",              ID_FILE_EXIT
     END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "Add &Row",           ID_EDIT_ADD_ROW
+        MENUITEM "&Delete Row",        ID_EDIT_DELETE_ROW
+    END
     POPUP "&Transaction"
     BEGIN
         MENUITEM "&Begin",             ID_TXN_BEGIN
