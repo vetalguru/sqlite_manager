@@ -41,7 +41,7 @@ public:
         MSG_WM_CREATE(OnCreate)
         MSG_WM_CLOSE(OnClose)
         MSG_WM_DESTROY(OnDestroy)
-        COMMAND_ID_HANDLER(ID_FILE_OPEN, OnFileOpen)
+        COMMAND_ID_HANDLER(ID_FILE_OPEN_DB, OnFileOpen)
         COMMAND_ID_HANDLER(ID_FILE_EXPORT, OnFileExport)
         COMMAND_ID_HANDLER(ID_FILE_EXIT, OnFileExit)
         COMMAND_ID_HANDLER(ID_QUERY_RUN, OnRunSql)
@@ -524,7 +524,7 @@ private:
                 return false;
             }
         } else {
-            txn_->Rollback();
+            static_cast<void>(txn_->Rollback());  // discarding on purpose
         }
         txn_.reset();
         dirty_ = false;
