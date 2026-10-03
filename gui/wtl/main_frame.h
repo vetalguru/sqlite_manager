@@ -1,10 +1,12 @@
 #ifndef SQLITE_MANAGER_GUI_WTL_MAIN_FRAME_H
 #define SQLITE_MANAGER_GUI_WTL_MAIN_FRAME_H
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cwctype>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -15,6 +17,7 @@
 #include "gui/wtl/edit_cell_dialog.h"
 #include "gui/wtl/resource.h"
 #include "gui/wtl/result_model.h"
+#include "gui/wtl/result_pane.h"
 #include "gui/wtl/run_sql_dialog.h"
 #include "gui/wtl/text.h"
 #include "gui/wtl/wtl.h"
@@ -25,10 +28,10 @@
 
 namespace sqlite_manager_gui::wtl {
 
-// The application's main window: a File menu, a status bar, and a splitter
-// with the schema objects on the left and the rows of the selected table or
-// view on the right. It owns the open DatabaseSession and drives the views
-// from the toolkit-free core.
+// The application's main window: a menu, a status bar, and a splitter with
+// the schema objects on the left and a notebook of result tabs on the right.
+// Tables and views each open in their own tab (a CResultPane); the shared
+// connection, transaction and commands act on the active tab.
 class CMainFrame : public CFrameWindowImpl<CMainFrame> {
 public:
     DECLARE_FRAME_WND_CLASS(L"SqliteManagerWtlFrame", IDR_MAINFRAME)
@@ -50,7 +53,6 @@ public:
         COMMAND_ID_HANDLER(ID_EDIT_ADD_COLUMN, OnAddColumn)
         COMMAND_ID_HANDLER(ID_EDIT_DROP_COLUMN, OnDropColumn)
         NOTIFY_HANDLER(IDC_OBJECTS, LVN_ITEMACTIVATE, OnObjectActivate)
-        NOTIFY_HANDLER(IDC_RESULTS, NM_DBLCLK, OnResultDblClick)
         CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
     END_MSG_MAP()
     // clang-format on
@@ -71,21 +73,17 @@ public:
         m_objects.InsertColumn(0, L"Name", LVCFMT_LEFT, 160);
         m_objects.InsertColumn(1, L"Type", LVCFMT_LEFT, 70);
 
-        m_results.Create(m_splitter, rcDefault, nullptr,
-                         WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS,
-                         WS_EX_CLIENTEDGE, IDC_RESULTS);
-        m_results.SetExtendedListViewStyle(LVS_EX_FULLROWSELECT |
-                                           LVS_EX_GRIDLINES);
+        m_view.Create(
+            m_splitter, rcDefault, nullptr,
+            WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
 
-        m_splitter.SetSplitterPanes(m_objects, m_results);
+        m_splitter.SetSplitterPanes(m_objects, m_view);
         m_splitter.SetSplitterPosPct(28);
 
         SetStatus(L"Open a database to begin.");
         return 0;
     }
 
-    // Block the close while a dirty transaction is open so its changes are
-    // not silently discarded; ConfirmPending decides what to do.
     void OnClose() {
         if (ConfirmPending()) SetMsgHandled(FALSE);  // let the default close
     }
@@ -112,7 +110,8 @@ public:
 
     LRESULT OnFileExport(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
                          BOOL& /*handled*/) {
-        if (current_result_.columns.empty()) {
+        CResultPane* pane = ActivePane();
+        if (pane == nullptr || pane->result().columns.empty()) {
             SetStatus(L"Nothing to export.");
             return 0;
         }
@@ -121,7 +120,9 @@ public:
                            L"CSV\0*.csv\0JSON\0*.json\0All files\0*.*\0",
                            *this);
         dialog.m_ofn.lpstrTitle = L"Export Result";
-        if (dialog.DoModal(*this) == IDOK) ExportResult(dialog.m_szFileName);
+        if (dialog.DoModal(*this) == IDOK) {
+            ExportResult(pane->result(), dialog.m_szFileName);
+        }
         return 0;
     }
 
@@ -137,29 +138,12 @@ public:
         if (sql.empty()) return 0;
         auto result = session_->RunQuery(sql);
         if (!result.ok()) {
-            ClearResults();
             SetStatus(Widen("Error: " + result.error().message).c_str());
             return 0;
         }
-        // An ad-hoc result is read-only and detached from any table.
-        current_.reset();
-        editable_ = false;
-        rowids_.clear();
-        current_columns_ = result.value().columns;
-        current_result_ = result.value();
-        FillResults(result.value());
-        ReportRowCount("Query", result.value().rows.size());
-        return 0;
-    }
-
-    // Double-click or Enter on a schema object loads its rows.
-    LRESULT OnObjectActivate(int /*id*/, LPNMHDR header, BOOL& /*handled*/) {
-        const LPNMITEMACTIVATE activate =
-            reinterpret_cast<LPNMITEMACTIVATE>(header);
-        const int index = activate->iItem;
-        if (index >= 0 && static_cast<size_t>(index) < objects_.size()) {
-            LoadObject(objects_[static_cast<size_t>(index)]);
-        }
+        CResultPane& pane = OpenOrFocus(QueryKey(), L"Query");
+        pane.Show(result.value(), {}, false, std::string());
+        ReportRowCount("Query", pane.result().rows.size());
         return 0;
     }
 
@@ -183,7 +167,7 @@ public:
         const sqlite_manager::Status status = txn_->Commit();
         txn_.reset();
         dirty_ = false;
-        ReloadCurrent();
+        ReloadActive();
         SetStatus(
             status.ok()
                 ? L"Committed."
@@ -197,7 +181,7 @@ public:
         const sqlite_manager::Status status = txn_->Rollback();
         txn_.reset();
         dirty_ = false;
-        ReloadCurrent();
+        ReloadActive();
         SetStatus(
             status.ok()
                 ? L"Rolled back."
@@ -205,54 +189,49 @@ public:
         return 0;
     }
 
-    // Double-click a result cell to edit it (editable table, in a
-    // transaction).
-    LRESULT OnResultDblClick(int /*id*/, LPNMHDR header, BOOL& /*handled*/) {
-        const LPNMITEMACTIVATE activate =
-            reinterpret_cast<LPNMITEMACTIVATE>(header);
-        EditCell(activate->iItem, activate->iSubItem);
-        return 0;
-    }
-
     LRESULT OnAddRow(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
                      BOOL& /*handled*/) {
-        if (!EnsureEditable()) return 0;
-        auto inserted = session_->InsertRow(current_->name, {});
+        CResultPane* pane = ActivePane();
+        if (!EnsureEditable(pane)) return 0;
+        auto inserted = session_->InsertRow(pane->table(), {});
         if (!inserted.ok()) {
             SetStatus(
                 Widen("Insert failed: " + inserted.error().message).c_str());
             return 0;
         }
         dirty_ = true;
-        ReloadCurrent();
+        ReloadPane(*pane);
         SetStatus(L"Row added - double-click a cell to edit it.");
         return 0;
     }
 
     LRESULT OnDeleteRow(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
                         BOOL& /*handled*/) {
-        if (!EnsureEditable()) return 0;
-        const int selected = m_results.GetSelectedIndex();
-        if (selected < 0 || static_cast<size_t>(selected) >= rowids_.size()) {
+        CResultPane* pane = ActivePane();
+        if (!EnsureEditable(pane)) return 0;
+        const int selected = pane->SelectedRow();
+        if (selected < 0 ||
+            static_cast<size_t>(selected) >= pane->rowids().size()) {
             SetStatus(L"Select a row to delete.");
             return 0;
         }
         const sqlite_manager::Status status = session_->DeleteRow(
-            current_->name, rowids_[static_cast<size_t>(selected)]);
+            pane->table(), pane->rowids()[static_cast<size_t>(selected)]);
         if (!status.ok()) {
             SetStatus(
                 Widen("Delete failed: " + status.error().message).c_str());
             return 0;
         }
         dirty_ = true;
-        ReloadCurrent();
+        ReloadPane(*pane);
         SetStatus(L"Row deleted.");
         return 0;
     }
 
     LRESULT OnAddColumn(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
                         BOOL& /*handled*/) {
-        if (!EnsureEditable()) return 0;
+        CResultPane* pane = ActivePane();
+        if (!EnsureEditable(pane)) return 0;
         CAddColumnDialog dialog;
         if (dialog.DoModal(*this) != IDOK) return 0;
         const std::string name = Narrow(dialog.name);
@@ -261,100 +240,99 @@ public:
             return 0;
         }
         const sqlite_manager::Status status =
-            session_->AddColumn(current_->name, name, Narrow(dialog.type));
+            session_->AddColumn(pane->table(), name, Narrow(dialog.type));
         if (!status.ok()) {
             SetStatus(
                 Widen("Add column failed: " + status.error().message).c_str());
             return 0;
         }
         dirty_ = true;
-        ReloadCurrent();
+        ReloadPane(*pane);
         SetStatus(Widen("Column \"" + name + "\" added.").c_str());
         return 0;
     }
 
     LRESULT OnDropColumn(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
                          BOOL& /*handled*/) {
-        if (!EnsureEditable()) return 0;
-        if (current_columns_.empty()) {
+        CResultPane* pane = ActivePane();
+        if (!EnsureEditable(pane)) return 0;
+        const std::vector<std::string>& columns = pane->result().columns;
+        if (columns.empty()) {
             SetStatus(L"This table has no columns to drop.");
             return 0;
         }
         std::vector<std::wstring> wide_columns;
-        wide_columns.reserve(current_columns_.size());
-        for (const std::string& column : current_columns_) {
+        wide_columns.reserve(columns.size());
+        for (const std::string& column : columns) {
             wide_columns.push_back(Widen(column));
         }
         CDropColumnDialog dialog(std::move(wide_columns));
         if (dialog.DoModal(*this) != IDOK || dialog.selected.empty()) return 0;
         const std::string name = Narrow(dialog.selected);
         const sqlite_manager::Status status =
-            session_->DropColumn(current_->name, name);
+            session_->DropColumn(pane->table(), name);
         if (!status.ok()) {
             SetStatus(
                 Widen("Drop column failed: " + status.error().message).c_str());
             return 0;
         }
         dirty_ = true;
-        ReloadCurrent();
+        ReloadPane(*pane);
         SetStatus(Widen("Column \"" + name + "\" dropped.").c_str());
         return 0;
     }
 
-private:
-    // Writes the current result to a file; the format follows the
-    // extension (.json for JSON, CSV otherwise).
-    void ExportResult(LPCWSTR wide_path) {
-        std::ofstream out;
-        out.open(wide_path, std::ios::binary);
-        if (!out) {
-            SetStatus(L"Cannot write the file.");
+    // Double-click or Enter on a schema object opens or focuses its tab.
+    LRESULT OnObjectActivate(int /*id*/, LPNMHDR header, BOOL& /*handled*/) {
+        const LPNMITEMACTIVATE activate =
+            reinterpret_cast<LPNMITEMACTIVATE>(header);
+        const int index = activate->iItem;
+        if (index >= 0 && static_cast<size_t>(index) < objects_.size()) {
+            LoadObject(objects_[static_cast<size_t>(index)]);
+        }
+        return 0;
+    }
+
+    // Edit one cell of a pane's table (invoked by the pane on double-click).
+    void EditCell(CResultPane& pane, int item, int sub) {
+        if (!session_ || !pane.editable()) return;
+        if (!txn_) {
+            SetStatus(L"Press Begin to edit inside a transaction.");
             return;
         }
-        const std::wstring path(wide_path);
-        bool json = false;
-        if (path.size() >= 5) {
-            std::wstring ext = path.substr(path.size() - 5);
-            for (wchar_t& ch : ext)
-                ch = static_cast<wchar_t>(std::towlower(ch));
-            json = (ext == L".json");
+        if (item < 0 || static_cast<size_t>(item) >= pane.rowids().size()) {
+            return;
         }
-        if (json) {
-            sqlite_manager::JsonWriter().Write(current_result_, out);
-        } else {
-            sqlite_manager::CsvWriter().Write(current_result_, out);
+        const std::vector<std::string>& columns = pane.result().columns;
+        if (sub < 0 || static_cast<size_t>(sub) >= columns.size()) return;
+        const std::vector<sqlite_manager::Cell>& row =
+            pane.result().rows[static_cast<size_t>(item)];
+        const std::wstring value =
+            Widen(static_cast<size_t>(sub) < row.size()
+                      ? CellText(row[static_cast<size_t>(sub)])
+                      : std::string());
+        CEditCellDialog dialog(Widen(columns[static_cast<size_t>(sub)]), value);
+        if (dialog.DoModal(*this) != IDOK) return;
+        const sqlite_manager::Cell cell{sqlite_manager::ValueType::kText,
+                                        Narrow(dialog.Value())};
+        const sqlite_manager::Status status = session_->UpdateCell(
+            pane.table(), pane.rowids()[static_cast<size_t>(item)],
+            columns[static_cast<size_t>(sub)], cell);
+        if (!status.ok()) {
+            SetStatus(
+                Widen("Update failed: " + status.error().message).c_str());
+            return;
         }
-        SetStatus(L"Exported.");
+        dirty_ = true;
+        ReloadPane(pane);
+        SetStatus(L"Updated.");
     }
 
-    // When a dirty transaction is open, asks whether to save (commit),
-    // discard (rollback), or cancel. Returns true if it is OK to proceed
-    // (the transaction was resolved), false to abort the action.
-    bool ConfirmPending() {
-        if (!txn_ || !dirty_) return true;
-        const int choice =
-            MessageBox(L"Save changes before continuing?", L"SQLite Manager",
-                       MB_YESNOCANCEL | MB_ICONQUESTION);
-        if (choice == IDCANCEL) return false;
-        if (choice == IDYES) {
-            const sqlite_manager::Status status = txn_->Commit();
-            if (!status.ok()) {
-                SetStatus(
-                    Widen("Commit failed: " + status.error().message).c_str());
-                return false;
-            }
-        } else {
-            txn_->Rollback();
-        }
-        txn_.reset();
-        dirty_ = false;
-        return true;
-    }
+private:
+    static const char* QueryKey() { return "\x01query"; }
 
-    // True when the current object is an editable table inside a
-    // transaction; otherwise reports why and returns false.
-    bool EnsureEditable() {
-        if (!session_ || !current_ || !editable_) {
+    bool EnsureEditable(CResultPane* pane) {
+        if (!session_ || pane == nullptr || !pane->editable()) {
             SetStatus(L"Select a table to edit.");
             return false;
         }
@@ -373,8 +351,14 @@ private:
                        L"Cannot open database", MB_ICONERROR | MB_OK);
             return;
         }
+        txn_.reset();
+        dirty_ = false;
+        m_view.RemoveAllPages();
+        for (std::unique_ptr<CResultPane>& pane : panes_) {
+            if (pane->m_hWnd != nullptr) pane->DestroyWindow();
+        }
+        panes_.clear();
         session_.emplace(std::move(opened).value());
-        ClearResults();
         PopulateObjects();
     }
 
@@ -401,28 +385,62 @@ private:
 
     void LoadObject(const ObjectInfo& object) {
         if (!session_) return;
-        if (object.kind == ObjectKind::kTable) {
-            current_ = object;
-            LoadEditable(object.name);
-        } else if (object.kind == ObjectKind::kView) {
-            current_ = object;
-            LoadReadonly(object.name);
-        } else {
-            current_.reset();
-            editable_ = false;
-            ClearResults();
+        if (object.kind != ObjectKind::kTable &&
+            object.kind != ObjectKind::kView) {
             SetStatus(L"Select a table or view to see its rows.");
+            return;
         }
+        CResultPane& pane = OpenOrFocus(object.name, Widen(object.name));
+        if (object.kind == ObjectKind::kTable) {
+            LoadEditableInto(pane, object.name);
+        } else {
+            LoadReadonlyInto(pane, object.name);
+        }
+    }
+
+    // Finds the pane for `key`, activating it, or creates a new tab.
+    CResultPane& OpenOrFocus(const std::string& key,
+                             const std::wstring& title) {
+        for (const std::unique_ptr<CResultPane>& pane : panes_) {
+            if (pane->key() == key) {
+                const int index = PageIndexOf(*pane);
+                if (index >= 0) m_view.SetActivePage(index);
+                return *pane;
+            }
+        }
+        auto pane = std::make_unique<CResultPane>(key);
+        pane->Create(m_view, rcDefault, nullptr,
+                     WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+        pane->set_edit_handler([this](CResultPane& p, int item, int sub) {
+            EditCell(p, item, sub);
+        });
+        m_view.AddPage(pane->m_hWnd, title.c_str(), -1, pane.get());
+        CResultPane& ref = *pane;
+        panes_.push_back(std::move(pane));
+        return ref;
+    }
+
+    int PageIndexOf(const CResultPane& pane) {
+        for (int i = 0; i < m_view.GetPageCount(); ++i) {
+            if (m_view.GetPageHWND(i) == pane.m_hWnd) return i;
+        }
+        return -1;
+    }
+
+    CResultPane* ActivePane() {
+        const int page = m_view.GetActivePage();
+        if (page < 0) return nullptr;
+        return reinterpret_cast<CResultPane*>(m_view.GetPageData(page));
     }
 
     // A table loaded with its rowid so cells can be addressed for editing;
     // the rowid column is kept out of the display. Falls back to read-only
-    // if the table has no rowid (e.g. WITHOUT ROWID).
-    void LoadEditable(const std::string& name) {
+    // if the table has no rowid.
+    void LoadEditableInto(CResultPane& pane, const std::string& name) {
         const std::string quoted = sqlite_manager::QuoteIdentifier(name);
         auto result = session_->RunQuery("SELECT rowid, * FROM " + quoted);
         if (!result.ok()) {
-            LoadReadonly(name);
+            LoadReadonlyInto(pane, name);
             return;
         }
         const sqlite_manager::QueryResult& full = result.value();
@@ -430,36 +448,34 @@ private:
         for (size_t i = 1; i < full.columns.size(); ++i) {
             display.columns.push_back(full.columns[i]);
         }
-        rowids_.clear();
-        for (const std::vector<sqlite_manager::Cell>& row : full.rows) {
-            rowids_.push_back(row.empty()
-                                  ? 0
-                                  : static_cast<std::int64_t>(std::strtoll(
-                                        row[0].text.c_str(), nullptr, 10)));
-            display.rows.emplace_back(row.begin() + 1, row.end());
+        std::vector<std::int64_t> rowids;
+        for (const std::vector<sqlite_manager::Cell>& r : full.rows) {
+            rowids.push_back(r.empty() ? 0
+                                       : static_cast<std::int64_t>(std::strtoll(
+                                             r[0].text.c_str(), nullptr, 10)));
+            display.rows.emplace_back(r.begin() + 1, r.end());
         }
-        editable_ = true;
-        current_columns_ = display.columns;
-        current_result_ = display;
-        FillResults(display);
-        ReportRowCount(name, display.rows.size());
+        pane.Show(std::move(display), std::move(rowids), true, name);
+        ReportRowCount(name, pane.result().rows.size());
     }
 
-    void LoadReadonly(const std::string& name) {
+    void LoadReadonlyInto(CResultPane& pane, const std::string& name) {
         const std::string quoted = sqlite_manager::QuoteIdentifier(name);
         auto result = session_->RunQuery("SELECT * FROM " + quoted);
         if (!result.ok()) {
-            editable_ = false;
-            ClearResults();
             SetStatus(Widen("Error: " + result.error().message).c_str());
             return;
         }
-        editable_ = false;
-        rowids_.clear();
-        current_columns_ = result.value().columns;
-        current_result_ = result.value();
-        FillResults(result.value());
-        ReportRowCount(name, result.value().rows.size());
+        pane.Show(result.value(), {}, false, std::string());
+        ReportRowCount(name, pane.result().rows.size());
+    }
+
+    void ReloadPane(CResultPane& pane) {
+        if (!pane.table().empty()) LoadEditableInto(pane, pane.table());
+    }
+
+    void ReloadActive() {
+        if (CResultPane* pane = ActivePane()) ReloadPane(*pane);
     }
 
     void ReportRowCount(const std::string& name, size_t rows) {
@@ -468,70 +484,51 @@ private:
                       .c_str());
     }
 
-    // Edit one cell (double-clicked) of the current editable table.
-    void EditCell(int item, int sub) {
-        if (!session_ || !current_ || !editable_) return;
-        if (!txn_) {
-            SetStatus(L"Press Begin to edit inside a transaction.");
+    void ExportResult(const sqlite_manager::QueryResult& result,
+                      LPCWSTR wide_path) {
+        std::ofstream out;
+        out.open(wide_path, std::ios::binary);
+        if (!out) {
+            SetStatus(L"Cannot write the file.");
             return;
         }
-        if (item < 0 || static_cast<size_t>(item) >= rowids_.size()) return;
-        if (sub < 0 || static_cast<size_t>(sub) >= current_columns_.size()) {
-            return;
+        const std::wstring path(wide_path);
+        bool json = false;
+        if (path.size() >= 5) {
+            std::wstring ext = path.substr(path.size() - 5);
+            for (wchar_t& ch : ext)
+                ch = static_cast<wchar_t>(std::towlower(ch));
+            json = (ext == L".json");
         }
-        const std::vector<sqlite_manager::Cell>& row =
-            current_result_.rows[static_cast<size_t>(item)];
-        const std::wstring value =
-            Widen(static_cast<size_t>(sub) < row.size()
-                      ? CellText(row[static_cast<size_t>(sub)])
-                      : std::string());
-        CEditCellDialog dialog(
-            Widen(current_columns_[static_cast<size_t>(sub)]), value);
-        if (dialog.DoModal(*this) != IDOK) return;
-        const sqlite_manager::Cell cell{sqlite_manager::ValueType::kText,
-                                        Narrow(dialog.Value())};
-        const sqlite_manager::Status status = session_->UpdateCell(
-            current_->name, rowids_[static_cast<size_t>(item)],
-            current_columns_[static_cast<size_t>(sub)], cell);
-        if (!status.ok()) {
-            SetStatus(
-                Widen("Update failed: " + status.error().message).c_str());
-            return;
+        if (json) {
+            sqlite_manager::JsonWriter().Write(result, out);
+        } else {
+            sqlite_manager::CsvWriter().Write(result, out);
         }
-        dirty_ = true;
-        ReloadCurrent();
-        SetStatus(L"Updated.");
+        SetStatus(L"Exported.");
     }
 
-    void FillResults(const sqlite_manager::QueryResult& result) {
-        ClearResults();
-        const std::vector<std::string> titles = ColumnTitles(result);
-        for (size_t c = 0; c < titles.size(); ++c) {
-            m_results.InsertColumn(static_cast<int>(c),
-                                   Widen(titles[c]).c_str(), LVCFMT_LEFT, 140);
-        }
-        for (size_t r = 0; r < result.rows.size(); ++r) {
-            const std::vector<std::string> cells = RowText(result, r);
-            m_results.InsertItem(static_cast<int>(r),
-                                 cells.empty() ? L"" : Widen(cells[0]).c_str());
-            for (size_t c = 1; c < cells.size(); ++c) {
-                m_results.SetItemText(static_cast<int>(r), static_cast<int>(c),
-                                      Widen(cells[c]).c_str());
+    // When a dirty transaction is open, asks whether to save (commit),
+    // discard (rollback), or cancel. Returns true if it is OK to proceed.
+    bool ConfirmPending() {
+        if (!txn_ || !dirty_) return true;
+        const int choice =
+            MessageBox(L"Save changes before continuing?", L"SQLite Manager",
+                       MB_YESNOCANCEL | MB_ICONQUESTION);
+        if (choice == IDCANCEL) return false;
+        if (choice == IDYES) {
+            const sqlite_manager::Status status = txn_->Commit();
+            if (!status.ok()) {
+                SetStatus(
+                    Widen("Commit failed: " + status.error().message).c_str());
+                return false;
             }
+        } else {
+            txn_->Rollback();
         }
-    }
-
-    void ClearResults() {
-        m_results.DeleteAllItems();
-        CHeaderCtrl header = m_results.GetHeader();
-        for (int i = header.GetItemCount() - 1; i >= 0; --i) {
-            m_results.DeleteColumn(i);
-        }
-    }
-
-    // Re-run the current object's query (e.g. after commit/rollback).
-    void ReloadCurrent() {
-        if (current_) LoadObject(*current_);
+        txn_.reset();
+        dirty_ = false;
+        return true;
     }
 
     static LPCWSTR KindLabel(ObjectKind kind) {
@@ -554,16 +551,12 @@ private:
 
     CSplitterWindow m_splitter;
     CListViewCtrl m_objects;
-    CListViewCtrl m_results;
+    CTabView m_view;
     std::optional<DatabaseSession> session_;
     std::optional<sqlite_manager::Transaction> txn_;
-    std::vector<ObjectInfo> objects_;    // parallel to the left list rows
-    std::optional<ObjectInfo> current_;  // the object shown on the right
-    sqlite_manager::QueryResult current_result_;  // rows shown on the right
-    std::vector<std::int64_t> rowids_;            // rowid per displayed row
-    std::vector<std::string> current_columns_;    // displayed column names
-    bool editable_ = false;  // the current object is an editable table
-    bool dirty_ = false;     // open transaction has edits
+    std::vector<ObjectInfo> objects_;  // parallel to the left list rows
+    std::vector<std::unique_ptr<CResultPane>> panes_;  // one per result tab
+    bool dirty_ = false;  // open transaction has edits
 };
 
 }  // namespace sqlite_manager_gui::wtl
