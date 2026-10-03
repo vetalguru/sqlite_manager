@@ -32,6 +32,7 @@ public:
     // clang-format off
     BEGIN_MSG_MAP(CMainFrame)
         MSG_WM_CREATE(OnCreate)
+        MSG_WM_CLOSE(OnClose)
         MSG_WM_DESTROY(OnDestroy)
         COMMAND_ID_HANDLER(ID_FILE_OPEN, OnFileOpen)
         COMMAND_ID_HANDLER(ID_FILE_EXIT, OnFileExit)
@@ -75,6 +76,12 @@ public:
 
         SetStatus(L"Open a database to begin.");
         return 0;
+    }
+
+    // Block the close while a dirty transaction is open so its changes are
+    // not silently discarded; ConfirmPending decides what to do.
+    void OnClose() {
+        if (ConfirmPending()) SetMsgHandled(FALSE);  // let the default close
     }
 
     void OnDestroy() { ::PostQuitMessage(0); }
@@ -247,6 +254,30 @@ public:
     }
 
 private:
+    // When a dirty transaction is open, asks whether to save (commit),
+    // discard (rollback), or cancel. Returns true if it is OK to proceed
+    // (the transaction was resolved), false to abort the action.
+    bool ConfirmPending() {
+        if (!txn_ || !dirty_) return true;
+        const int choice =
+            MessageBox(L"Save changes before continuing?", L"SQLite Manager",
+                       MB_YESNOCANCEL | MB_ICONQUESTION);
+        if (choice == IDCANCEL) return false;
+        if (choice == IDYES) {
+            const sqlite_manager::Status status = txn_->Commit();
+            if (!status.ok()) {
+                SetStatus(
+                    Widen("Commit failed: " + status.error().message).c_str());
+                return false;
+            }
+        } else {
+            txn_->Rollback();
+        }
+        txn_.reset();
+        dirty_ = false;
+        return true;
+    }
+
     // True when the current object is an editable table inside a
     // transaction; otherwise reports why and returns false.
     bool EnsureEditable() {
@@ -262,6 +293,7 @@ private:
     }
 
     void OpenDatabase(LPCWSTR wide_path) {
+        if (!ConfirmPending()) return;  // keep the current unsaved work
         auto opened = DatabaseSession::Open(Narrow(wide_path));
         if (!opened.ok()) {
             MessageBox(Widen(opened.error().message).c_str(),
