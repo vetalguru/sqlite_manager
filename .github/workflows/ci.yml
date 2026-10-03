@@ -105,3 +105,20 @@ jobs:
             build/coverage/coverage
             build/coverage/coverage.xml
           if-no-files-found: error
+
+  windows-wtl:
+    name: windows-wtl
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The hosted windows-latest image ships Visual Studio 2022 with the ATL
+      # component, which WTL requires; no extra install step is needed.
+      - name: Configure
+        run: cmake --preset windows-wtl
+
+      - name: Build the WTL GUI
+        run: cmake --build build/windows-wtl --target sqlite-manager-wtl --config Debug
