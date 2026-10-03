@@ -33,13 +33,15 @@ add_executable(sqlite_manager_tests
     row_editor_test.cpp
     csv_importer_test.cpp
     schema_editor_test.cpp
-    golden_test.cpp)
+    golden_test.cpp
+    result_model_test.cpp)
 
 target_link_libraries(sqlite_manager_tests
     PRIVATE
         sqlite_manager
         sqlite_manager_cli_lib
         sqlite_manager_gui_core
+        sqlite_manager_wtl_model
         sqlite_manager_warnings
         GTest::gtest_main)
 
