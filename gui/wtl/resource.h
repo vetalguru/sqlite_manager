@@ -5,7 +5,7 @@
 // script (sqlite_manager.rc) and the C++ message maps.
 #define IDR_MAINFRAME 128
 
-#define ID_FILE_OPEN 40001
+#define ID_FILE_OPEN_DB 40001
 #define ID_FILE_EXIT 40002
 #define ID_FILE_EXPORT 40003
 
