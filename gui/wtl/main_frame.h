@@ -3,6 +3,8 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <cwctype>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -13,9 +15,11 @@
 #include "gui/wtl/edit_cell_dialog.h"
 #include "gui/wtl/resource.h"
 #include "gui/wtl/result_model.h"
+#include "gui/wtl/run_sql_dialog.h"
 #include "gui/wtl/text.h"
 #include "gui/wtl/wtl.h"
 #include "sqlite_manager/query_result.h"
+#include "sqlite_manager/result_writer.h"
 #include "sqlite_manager/sql_util.h"
 #include "sqlite_manager/transaction.h"
 
@@ -35,7 +39,9 @@ public:
         MSG_WM_CLOSE(OnClose)
         MSG_WM_DESTROY(OnDestroy)
         COMMAND_ID_HANDLER(ID_FILE_OPEN, OnFileOpen)
+        COMMAND_ID_HANDLER(ID_FILE_EXPORT, OnFileExport)
         COMMAND_ID_HANDLER(ID_FILE_EXIT, OnFileExit)
+        COMMAND_ID_HANDLER(ID_QUERY_RUN, OnRunSql)
         COMMAND_ID_HANDLER(ID_TXN_BEGIN, OnTxnBegin)
         COMMAND_ID_HANDLER(ID_TXN_COMMIT, OnTxnCommit)
         COMMAND_ID_HANDLER(ID_TXN_ROLLBACK, OnTxnRollback)
@@ -101,6 +107,48 @@ public:
     LRESULT OnFileExit(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
                        BOOL& /*handled*/) {
         PostMessage(WM_CLOSE);
+        return 0;
+    }
+
+    LRESULT OnFileExport(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                         BOOL& /*handled*/) {
+        if (current_result_.columns.empty()) {
+            SetStatus(L"Nothing to export.");
+            return 0;
+        }
+        CFileDialog dialog(/*bOpenFileDialog=*/FALSE, L"csv", L"result.csv",
+                           OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY,
+                           L"CSV\0*.csv\0JSON\0*.json\0All files\0*.*\0",
+                           *this);
+        dialog.m_ofn.lpstrTitle = L"Export Result";
+        if (dialog.DoModal(*this) == IDOK) ExportResult(dialog.m_szFileName);
+        return 0;
+    }
+
+    LRESULT OnRunSql(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                     BOOL& /*handled*/) {
+        if (!session_) {
+            SetStatus(L"Open a database first.");
+            return 0;
+        }
+        CRunSqlDialog dialog;
+        if (dialog.DoModal(*this) != IDOK) return 0;
+        const std::string sql = Narrow(dialog.sql);
+        if (sql.empty()) return 0;
+        auto result = session_->RunQuery(sql);
+        if (!result.ok()) {
+            ClearResults();
+            SetStatus(Widen("Error: " + result.error().message).c_str());
+            return 0;
+        }
+        // An ad-hoc result is read-only and detached from any table.
+        current_.reset();
+        editable_ = false;
+        rowids_.clear();
+        current_columns_ = result.value().columns;
+        current_result_ = result.value();
+        FillResults(result.value());
+        ReportRowCount("Query", result.value().rows.size());
         return 0;
     }
 
@@ -254,6 +302,31 @@ public:
     }
 
 private:
+    // Writes the current result to a file; the format follows the
+    // extension (.json for JSON, CSV otherwise).
+    void ExportResult(LPCWSTR wide_path) {
+        std::ofstream out;
+        out.open(wide_path, std::ios::binary);
+        if (!out) {
+            SetStatus(L"Cannot write the file.");
+            return;
+        }
+        const std::wstring path(wide_path);
+        bool json = false;
+        if (path.size() >= 5) {
+            std::wstring ext = path.substr(path.size() - 5);
+            for (wchar_t& ch : ext)
+                ch = static_cast<wchar_t>(std::towlower(ch));
+            json = (ext == L".json");
+        }
+        if (json) {
+            sqlite_manager::JsonWriter().Write(current_result_, out);
+        } else {
+            sqlite_manager::CsvWriter().Write(current_result_, out);
+        }
+        SetStatus(L"Exported.");
+    }
+
     // When a dirty transaction is open, asks whether to save (commit),
     // discard (rollback), or cancel. Returns true if it is OK to proceed
     // (the transaction was resolved), false to abort the action.

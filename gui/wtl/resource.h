@@ -7,6 +7,9 @@
 
 #define ID_FILE_OPEN 40001
 #define ID_FILE_EXIT 40002
+#define ID_FILE_EXPORT 40003
+
+#define ID_QUERY_RUN 40030
 
 #define ID_TXN_BEGIN 40010
 #define ID_TXN_COMMIT 40011
@@ -31,6 +34,10 @@
 #define IDC_COL_NAME 2010
 #define IDC_COL_TYPE 2011
 #define IDC_COL_LIST 2012
+
+// Run-SQL dialog.
+#define IDD_RUN_SQL 203
+#define IDC_SQL_TEXT 2020
 
 #ifndef IDC_STATIC
 #define IDC_STATIC (-1)
