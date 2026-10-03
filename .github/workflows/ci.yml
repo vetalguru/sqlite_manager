@@ -108,15 +108,18 @@ jobs:
 
   windows-wtl:
     name: windows-wtl
-    runs-on: windows-latest
+    # Pinned to the VS2022 image: the windows-wtl preset uses the "Visual
+    # Studio 17 2022" generator, and the vendored WTL 10.0.10320 targets
+    # VS2022. (windows-latest moved to VS2026 in mid-2026.) The image ships
+    # VS2022 with the ATL component WTL requires, so no extra install is
+    # needed.
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      # The hosted windows-latest image ships Visual Studio 2022 with the ATL
-      # component, which WTL requires; no extra install step is needed.
       - name: Configure
         run: cmake --preset windows-wtl
 
