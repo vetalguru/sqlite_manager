@@ -40,13 +40,33 @@
             "cacheVariables": {
                 "SQLITE_MANAGER_COVERAGE": "ON"
             }
+        },
+        {
+            "name": "windows-wtl",
+            "displayName": "Windows WTL GUI",
+            "generator": "Visual Studio 17 2022",
+            "architecture": "x64",
+            "binaryDir": "${sourceDir}/build/windows-wtl",
+            "cacheVariables": {
+                "SQLITE_MANAGER_BUILD_WTL_GUI": "ON"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
         }
     ],
     "buildPresets": [
         { "name": "linux-debug", "configurePreset": "linux-debug" },
         { "name": "linux-release", "configurePreset": "linux-release" },
         { "name": "linux-asan", "configurePreset": "linux-asan" },
-        { "name": "linux-coverage", "configurePreset": "linux-coverage" }
+        { "name": "linux-coverage", "configurePreset": "linux-coverage" },
+        {
+            "name": "windows-wtl",
+            "configurePreset": "windows-wtl",
+            "configuration": "Debug"
+        }
     ],
     "testPresets": [
         {
