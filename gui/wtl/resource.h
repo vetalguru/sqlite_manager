@@ -14,6 +14,8 @@
 
 #define ID_EDIT_ADD_ROW 40020
 #define ID_EDIT_DELETE_ROW 40021
+#define ID_EDIT_ADD_COLUMN 40022
+#define ID_EDIT_DROP_COLUMN 40023
 
 // Child control identifiers (for WM_NOTIFY routing).
 #define IDC_OBJECTS 1000
@@ -22,6 +24,13 @@
 // Edit-cell dialog.
 #define IDD_EDIT_CELL 200
 #define IDC_EDIT_VALUE 2001
+
+// Add/Drop column dialogs.
+#define IDD_ADD_COLUMN 201
+#define IDD_DROP_COLUMN 202
+#define IDC_COL_NAME 2010
+#define IDC_COL_TYPE 2011
+#define IDC_COL_LIST 2012
 
 #ifndef IDC_STATIC
 #define IDC_STATIC (-1)

@@ -9,6 +9,7 @@
 
 #include "gui/core/database_session.h"
 #include "gui/core/schema_info.h"
+#include "gui/wtl/column_dialogs.h"
 #include "gui/wtl/edit_cell_dialog.h"
 #include "gui/wtl/resource.h"
 #include "gui/wtl/result_model.h"
@@ -39,6 +40,8 @@ public:
         COMMAND_ID_HANDLER(ID_TXN_ROLLBACK, OnTxnRollback)
         COMMAND_ID_HANDLER(ID_EDIT_ADD_ROW, OnAddRow)
         COMMAND_ID_HANDLER(ID_EDIT_DELETE_ROW, OnDeleteRow)
+        COMMAND_ID_HANDLER(ID_EDIT_ADD_COLUMN, OnAddColumn)
+        COMMAND_ID_HANDLER(ID_EDIT_DROP_COLUMN, OnDropColumn)
         NOTIFY_HANDLER(IDC_OBJECTS, LVN_ITEMACTIVATE, OnObjectActivate)
         NOTIFY_HANDLER(IDC_RESULTS, NM_DBLCLK, OnResultDblClick)
         CHAIN_MSG_MAP(CFrameWindowImpl<CMainFrame>)
@@ -189,6 +192,57 @@ public:
         dirty_ = true;
         ReloadCurrent();
         SetStatus(L"Row deleted.");
+        return 0;
+    }
+
+    LRESULT OnAddColumn(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                        BOOL& /*handled*/) {
+        if (!EnsureEditable()) return 0;
+        CAddColumnDialog dialog;
+        if (dialog.DoModal(*this) != IDOK) return 0;
+        const std::string name = Narrow(dialog.name);
+        if (name.empty()) {
+            SetStatus(L"A column name is required.");
+            return 0;
+        }
+        const sqlite_manager::Status status =
+            session_->AddColumn(current_->name, name, Narrow(dialog.type));
+        if (!status.ok()) {
+            SetStatus(
+                Widen("Add column failed: " + status.error().message).c_str());
+            return 0;
+        }
+        dirty_ = true;
+        ReloadCurrent();
+        SetStatus(Widen("Column \"" + name + "\" added.").c_str());
+        return 0;
+    }
+
+    LRESULT OnDropColumn(WORD /*code*/, WORD /*id*/, HWND /*ctl*/,
+                         BOOL& /*handled*/) {
+        if (!EnsureEditable()) return 0;
+        if (current_columns_.empty()) {
+            SetStatus(L"This table has no columns to drop.");
+            return 0;
+        }
+        std::vector<std::wstring> wide_columns;
+        wide_columns.reserve(current_columns_.size());
+        for (const std::string& column : current_columns_) {
+            wide_columns.push_back(Widen(column));
+        }
+        CDropColumnDialog dialog(std::move(wide_columns));
+        if (dialog.DoModal(*this) != IDOK || dialog.selected.empty()) return 0;
+        const std::string name = Narrow(dialog.selected);
+        const sqlite_manager::Status status =
+            session_->DropColumn(current_->name, name);
+        if (!status.ok()) {
+            SetStatus(
+                Widen("Drop column failed: " + status.error().message).c_str());
+            return 0;
+        }
+        dirty_ = true;
+        ReloadCurrent();
+        SetStatus(Widen("Column \"" + name + "\" dropped.").c_str());
         return 0;
     }
 
