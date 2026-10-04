@@ -57,13 +57,23 @@ function(sqlite_manager_enable_lint target)
     endif()
 endfunction()
 
+# The CLI, the GUIs, their third-party deps, tests and examples. On by
+# default for a standalone build; off when sqlite_manager is pulled in by
+# another project (add_subdirectory / submodule / FetchContent), which then
+# gets only the library and SQLite - nothing that needs a terminal or a
+# desktop toolkit, so it also cross-compiles (e.g. for Android).
+option(SQLITE_MANAGER_BUILD_TOOLS
+    "Build the CLI, GUIs, tests and examples" ${PROJECT_IS_TOP_LEVEL})
+
 add_subdirectory(third_party)
 add_subdirectory(src)
-add_subdirectory(cli)
-add_subdirectory(gui)
+if(SQLITE_MANAGER_BUILD_TOOLS)
+    add_subdirectory(cli)
+    add_subdirectory(gui)
+endif()
 
 # Tests and examples only when built as the top-level project
-if(PROJECT_IS_TOP_LEVEL)
+if(PROJECT_IS_TOP_LEVEL AND SQLITE_MANAGER_BUILD_TOOLS)
     enable_testing()
     add_subdirectory(tests)
     add_subdirectory(examples)
@@ -73,7 +83,7 @@ endif()
 # project sources exactly as the Lint CI workflow does - findings are
 # errors. Needs a compile database (the linux-debug preset exports one).
 # Run it before pushing to catch what CI's clang-tidy would flag.
-if(PROJECT_IS_TOP_LEVEL AND CLANG_TIDY_EXE)
+if(PROJECT_IS_TOP_LEVEL AND SQLITE_MANAGER_BUILD_TOOLS AND CLANG_TIDY_EXE)
     file(GLOB lint_sources CONFIGURE_DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/cli/*.cpp
@@ -91,7 +101,7 @@ endif()
 # line coverage for project code (terminal summary + HTML + XML). Needs a
 # coverage-instrumented build (the linux-coverage preset, i.e.
 # SQLITE_MANAGER_COVERAGE=ON) and gcovr.
-if(PROJECT_IS_TOP_LEVEL AND SQLITE_MANAGER_COVERAGE)
+if(PROJECT_IS_TOP_LEVEL AND SQLITE_MANAGER_BUILD_TOOLS AND SQLITE_MANAGER_COVERAGE)
     find_program(GCOVR_EXE gcovr)
     if(GCOVR_EXE)
         add_custom_target(coverage
@@ -120,7 +130,7 @@ endif()
 #   cpack -G DEB
 # The package wraps the statically linked sqlite-manager binary; its
 # version follows the CLI's (MAJOR.MINOR from CMake, PATCH from git).
-if(PROJECT_IS_TOP_LEVEL)
+if(PROJECT_IS_TOP_LEVEL AND SQLITE_MANAGER_BUILD_TOOLS)
     set(CPACK_PACKAGE_NAME "sqlite-manager")
     set(CPACK_PACKAGE_VERSION "${SQLITE_MANAGER_CLI_VERSION}")
     set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
