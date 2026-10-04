@@ -32,6 +32,9 @@ No release has been tagged yet, so everything so far is under _Unreleased_.
 - **CLI** — interactive command history persisted to
   `~/.sqlite_manager_history` across sessions.
 - **CLI** — `.deb` packaging with a man page, and a CMake `uninstall` target.
+- **Tooling** — `SQLITE_MANAGER_BUILD_TOOLS` option (default: on only for a
+  top-level build) so an embedding project builds just the library and
+  SQLite, without the CLI, GUIs, tests or their dependencies.
 - **Tooling** — CI (debug/release), an ASan/UBSan sanitizers pipeline, a
   clang-tidy lint pipeline with a matching `lint` target, and a `.clang-format`
   config applied across the codebase.

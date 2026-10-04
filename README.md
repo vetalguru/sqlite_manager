@@ -165,7 +165,16 @@ sqlite-manager --readonly app.db "SELECT * FROM ammo"
 
 ## Library
 
-Link against the `sqlite_manager` target and use the RAII wrappers directly:
+Link against the `sqlite_manager` target and use the RAII wrappers directly.
+As a subproject (`add_subdirectory`, a git submodule, or FetchContent) only
+the library and SQLite are built: `SQLITE_MANAGER_BUILD_TOOLS` (the CLI,
+GUIs, tests and examples) defaults to `OFF` there, so the embedding project
+needs no terminal or GUI dependencies and can cross-compile (e.g. Android):
+
+```cmake
+add_subdirectory(third_party/sqlite_manager)
+target_link_libraries(my_app PRIVATE sqlite_manager)
+```
 
 ```cpp
 #include "sqlite_manager/connection.h"
